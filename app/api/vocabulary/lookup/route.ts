@@ -5,44 +5,86 @@ import crypto from 'crypto'
 const TENCENT_SECRET_ID = process.env.TENCENT_SECRET_ID || ''
 const TENCENT_SECRET_KEY = process.env.TENCENT_SECRET_KEY || ''
 
-// 腾讯翻译API签名
-function generateSignature(params: Record<string, string>, secretKey: string): string {
-  const sortedKeys = Object.keys(params).sort()
-  const signStr = sortedKeys.map(key => `${key}=${encodeURIComponent(params[key])}`).join('&')
-  return crypto.createHmac('sha1', secretKey).update(signStr).digest('base64')
+// 腾讯云API TC3-HMAC-SHA256签名
+function sha256(message: string): string {
+  return crypto.createHash('sha256').update(message).digest('hex')
 }
 
-// 调用腾讯翻译API
+function hmacSha256(key: Buffer | string, message: string): Buffer {
+  return crypto.createHmac('sha256', key).update(message).digest()
+}
+
+function getDate(timestamp: number): string {
+  const date = new Date(timestamp * 1000)
+  return date.toISOString().split('T')[0]
+}
+
+// 腾讯翻译API签名 (TC3-HMAC-SHA256)
 async function translateWithTencent(word: string): Promise<string> {
-  const endpoint = 'tmt.tencentcloudapi.com'
+  const service = 'tmt'
+  const host = 'tmt.tencentcloudapi.com'
   const action = 'TextTranslate'
   const version = '2018-03-21'
-  const timestamp = Math.floor(Date.now() / 1000).toString()
-  const nonce = Math.random().toString(36).substring(2)
+  const timestamp = Math.floor(Date.now() / 1000)
+  const date = getDate(timestamp)
   
-  const params: Record<string, string> = {
-    Action: action,
-    Version: version,
-    Region: 'ap-beijing',
-    Timestamp: timestamp,
-    Nonce: nonce,
-    SecretId: TENCENT_SECRET_ID,
+  // 请求体
+  const payload = JSON.stringify({
+    SourceText: word,
     Source: 'en',
     Target: 'zh',
-    SourceText: word,
-    ProjectId: '0',
-  }
+    ProjectId: 0,
+  })
   
-  const signature = generateSignature(params, TENCENT_SECRET_KEY)
+  // 步骤1：拼接规范请求串
+  const httpRequestMethod = 'POST'
+  const canonicalUri = '/'
+  const canonicalQueryString = ''
+  const canonicalHeaders = `content-type:application/json\nhost:${host}\n`
+  const signedHeaders = 'content-type;host'
+  const hashedRequestPayload = sha256(payload)
+  const canonicalRequest = `${httpRequestMethod}\n${canonicalUri}\n${canonicalQueryString}\n${canonicalHeaders}\n${signedHeaders}\n${hashedRequestPayload}`
   
-  const url = `https://${endpoint}?${Object.entries(params).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&')}&Signature=${encodeURIComponent(signature)}`
+  // 步骤2：拼接待签名字符串
+  const algorithm = 'TC3-HMAC-SHA256'
+  const credentialScope = `${date}/${service}/tc3_request`
+  const hashedCanonicalRequest = sha256(canonicalRequest)
+  const stringToSign = `${algorithm}\n${timestamp}\n${credentialScope}\n${hashedCanonicalRequest}`
+  
+  // 步骤3：计算签名
+  const secretDate = hmacSha256(Buffer.from(`TC3${TENCENT_SECRET_KEY}`, 'utf-8'), date)
+  const secretService = hmacSha256(secretDate, service)
+  const secretSigning = hmacSha256(secretService, 'tc3_request')
+  const signature = hmacSha256(secretSigning, stringToSign).toString('hex')
+  
+  // 步骤4：拼接 Authorization
+  const authorization = `${algorithm} Credential=${TENCENT_SECRET_ID}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`
+  
+  // 发送请求
+  const response = await fetch(`https://${host}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Host': host,
+      'Authorization': authorization,
+      'X-TC-Action': action,
+      'X-TC-Version': version,
+      'X-TC-Timestamp': timestamp.toString(),
+      'X-TC-Region': 'ap-beijing',
+    },
+    body: payload,
+  })
   
   try {
-    const response = await fetch(url)
     const data = await response.json()
+    console.log('Tencent API response:', JSON.stringify(data))
     
     if (data.Response && data.Response.TargetText) {
       return data.Response.TargetText
+    }
+    if (data.Response && data.Response.Error) {
+      console.error('Tencent API error:', data.Response.Error)
+      return `错误: ${data.Response.Error.Message}`
     }
     return '未找到释义'
   } catch (error) {
