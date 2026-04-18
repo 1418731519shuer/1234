@@ -352,7 +352,11 @@ export default function AIChatPanel({
       </div>
       
       {/* 消息列表 */}
-      <div className="flex-1 min-h-0 overflow-y-auto p-4" ref={scrollRef}>
+      <div 
+        className="p-4"
+        ref={scrollRef}
+        style={{ flex: '1 1 0%', minHeight: 0, overflowY: 'auto' }}
+      >
         {messages.length === 0 ? (
           <div className="text-center py-8">
             <p className="text-emerald-600 text-sm mb-4">有什么问题想问我？</p>

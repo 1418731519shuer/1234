@@ -368,7 +368,10 @@ export default function ReadingPanel({
       </div>
       
       {/* 文章内容 */}
-      <div className={`flex-1 min-h-0 overflow-y-auto p-6 relative ${eyeCareMode ? 'bg-[#f7f3e3]' : 'bg-white'}`}>
+      <div 
+        className={`relative p-6 ${eyeCareMode ? 'bg-[#f7f3e3]' : 'bg-white'}`}
+        style={{ flex: '1 1 0%', minHeight: 0, overflowY: 'auto' }}
+      >
         <div
           className={`prose prose-sm max-w-none select-text ${isMarkingMode ? 'cursor-crosshair' : 'cursor-text'} ${eyeCareMode ? 'text-[#3d3d3d]' : 'text-gray-800'}`}
           onMouseUp={handleMouseUp}

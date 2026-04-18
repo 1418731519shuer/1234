@@ -262,9 +262,9 @@ export default function PracticePage({ params }: { params: Promise<{ id: string 
         </div>
         
         {/* 主内容区 - 三栏布局 */}
-        <div className="flex h-[calc(100vh-57px)]">
+        <div className="flex" style={{ height: 'calc(100vh - 57px)' }}>
           {/* 左侧文章 - 50% */}
-          <div className="w-1/2 border-r border-slate-200 bg-white h-full overflow-hidden flex flex-col">
+          <div className="border-r border-slate-200 bg-white" style={{ width: '50%', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <ReadingPanel
               content={article.content}
               title={article.title}
@@ -282,11 +282,11 @@ export default function PracticePage({ params }: { params: Promise<{ id: string 
           </div>
           
           {/* 中间题目解析 - 25% */}
-          <div className="w-1/4 border-r border-slate-200 bg-slate-50 h-full overflow-hidden flex flex-col">
-            <div className="p-3 border-b bg-white shrink-0">
+          <div className="border-r border-slate-200 bg-slate-50" style={{ width: '25%', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <div className="p-3 border-b bg-white" style={{ flexShrink: 0 }}>
               <h2 className="font-semibold text-slate-800">题目解析</h2>
             </div>
-            <div className="flex-1 overflow-y-auto p-3">
+            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }} className="p-3">
               <div className="space-y-3">
                 {article.questions.map((q, i) => {
                   const isCorrect = answers[q.id] === q.correctAnswer
@@ -365,7 +365,7 @@ export default function PracticePage({ params }: { params: Promise<{ id: string 
           </div>
           
           {/* 右侧AI问答 - 25% */}
-          <div className="w-1/4 bg-white h-full overflow-hidden flex flex-col">
+          <div className="bg-white" style={{ width: '25%', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <AIChatPanel
               articleTitle={article.title}
               articleContent={article.content}
