@@ -47,6 +47,7 @@ interface AIChatPanelProps {
   onSaveChat: (messages: Message[]) => void
   onSaveErrorNote?: (questionId: string, note: string) => void
   errorNotes?: Record<string, string>
+  initialQuestion?: string
 }
 
 const GREETINGS = [
@@ -66,6 +67,7 @@ export default function AIChatPanel({
   onSaveChat,
   onSaveErrorNote,
   errorNotes = {},
+  initialQuestion = '',
 }: AIChatPanelProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
@@ -96,6 +98,13 @@ export default function AIChatPanel({
       setSelectedQuestion(currentQuestionIndex)
     }
   }, [isSubmitted, currentQuestionIndex])
+  
+  // 处理从题目解析传入的问题
+  useEffect(() => {
+    if (initialQuestion) {
+      setInput(initialQuestion)
+    }
+  }, [initialQuestion])
   
   const handleFeed = () => {
     if (fishCount > 0) {

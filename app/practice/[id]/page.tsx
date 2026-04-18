@@ -60,6 +60,7 @@ export default function PracticePage({ params }: { params: Promise<{ id: string 
   const [errorNotes, setErrorNotes] = useState<Record<string, string>>({})
   const [translation, setTranslation] = useState<Array<{english: string, chinese: string}>>([])
   const [isTranslating, setIsTranslating] = useState(false)
+  const [aiQuestion, setAiQuestion] = useState<string>('')
   
   useEffect(() => {
     const fetchArticle = async () => {
@@ -332,6 +333,21 @@ export default function PracticePage({ params }: { params: Promise<{ id: string 
                         </div>
                       )}
                       
+                      {/* 问AI按钮 */}
+                      <div className="mt-3 ml-8">
+                        <button
+                          className="text-xs text-emerald-600 hover:text-emerald-700 font-medium flex items-center gap-1"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setCurrentIndex(i)
+                            setAiQuestion(`请帮我详细解析第${i + 1}题：${q.stem}`)
+                            setShowAI(true)
+                          }}
+                        >
+                          <span>🐱</span> 问AI助教
+                        </button>
+                      </div>
+                      
                       {errorNotes[q.id] && (
                         <div className="mt-2 ml-8 p-2 bg-amber-50 rounded-lg text-xs text-amber-700">
                           <span className="font-medium">笔记：</span>{errorNotes[q.id]}
@@ -359,6 +375,7 @@ export default function PracticePage({ params }: { params: Promise<{ id: string 
               onSaveChat={handleSaveChat}
               onSaveErrorNote={handleSaveErrorNote}
               errorNotes={errorNotes}
+              initialQuestion={aiQuestion}
             />
           </div>
         </div>
