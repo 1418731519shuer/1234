@@ -197,6 +197,7 @@ model Vocabulary {
   context      String?
   articleId    String?
   category     String    @default("word")
+  isFavorite   Boolean   @default(false)  // 是否收藏到生词本
   mastery      Int       @default(0)
   reviewCount  Int       @default(0)
   createdAt    DateTime  @default(now())

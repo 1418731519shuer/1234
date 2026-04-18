@@ -81,6 +81,10 @@ export default function ReadingPanel({
   const [isLoadingMeaning, setIsLoadingMeaning] = useState(false)
   const [popupPosition, setPopupPosition] = useState({ x: 0, y: 0 })
   const [addedWords, setAddedWords] = useState<Set<string>>(new Set())
+  
+  // 生词缓存（预加载后存储）
+  const [wordCache, setWordCache] = useState<Record<string, string>>({})
+  const [isPreloading, setIsPreloading] = useState(false)
 
   // 键盘快捷键
   useEffect(() => {
@@ -106,6 +110,26 @@ export default function ReadingPanel({
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [selectedHighlight, onRemoveHighlight])
+  
+  // 提交后预加载文章所有生词
+  useEffect(() => {
+    if (isSubmitted && articleId && content) {
+      setIsPreloading(true)
+      fetch(`/api/vocabulary/lookup?articleId=${articleId}&content=${encodeURIComponent(content.slice(0, 5000))}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.words) {
+            const cache: Record<string, string> = {}
+            for (const [word, info] of Object.entries(data.words)) {
+              cache[word] = (info as { meaning: string }).meaning
+            }
+            setWordCache(cache)
+          }
+        })
+        .catch(console.error)
+        .finally(() => setIsPreloading(false))
+    }
+  }, [isSubmitted, articleId, content])
 
   // 鼠标滑过文本时自动标记
   const handleMouseUp = useCallback((e: React.MouseEvent) => {
@@ -132,7 +156,7 @@ export default function ReadingPanel({
     }
   }, [isMarkingMode, activeColor, currentQuestion, highlights, onHighlight, onUpdateHighlight, onTextSelect])
   
-  // 处理单词点击（提交后可用）
+  // 处理单词点击（提交后可用）- 优先从缓存读取
   const handleWordClick = useCallback(async (word: string, e: React.MouseEvent) => {
     if (!isSubmitted) return
     
@@ -144,26 +168,38 @@ export default function ReadingPanel({
     const rect = (e.target as HTMLElement).getBoundingClientRect()
     setPopupPosition({ x: rect.left, y: rect.bottom + 5 })
     setSelectedWord(cleanWord)
+    
+    // 优先从缓存读取
+    if (wordCache[cleanWord]) {
+      setWordMeaning(wordCache[cleanWord])
+      setIsLoadingMeaning(false)
+      return
+    }
+    
+    // 缓存没有，调用API
     setWordMeaning('')
     setIsLoadingMeaning(true)
     
-    // 获取单词释义
     try {
       const response = await fetch('/api/vocabulary/lookup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ word: cleanWord }),
+        body: JSON.stringify({ word: cleanWord, articleId }),
       })
       const data = await response.json()
       setWordMeaning(data.meaning || '未找到释义')
+      // 更新缓存
+      if (data.meaning) {
+        setWordCache(prev => ({ ...prev, [cleanWord]: data.meaning }))
+      }
     } catch (error) {
       setWordMeaning('获取释义失败')
     } finally {
       setIsLoadingMeaning(false)
     }
-  }, [isSubmitted])
+  }, [isSubmitted, wordCache, articleId])
   
-  // 添加到生词本
+  // 收藏到生词本
   const addToVocabulary = async () => {
     if (!selectedWord || !wordMeaning) return
     
@@ -171,16 +207,11 @@ export default function ReadingPanel({
       await fetch('/api/vocabulary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          word: selectedWord,
-          meaning: wordMeaning,
-          articleId,
-        }),
+        body: JSON.stringify({ word: selectedWord, isFavorite: true }),
       })
       setAddedWords(prev => new Set(prev).add(selectedWord))
-      setSelectedWord(null)
     } catch (error) {
-      console.error('添加生词失败:', error)
+      console.error('收藏失败:', error)
     }
   }
 
@@ -411,9 +442,10 @@ export default function ReadingPanel({
                   onClick={addToVocabulary}
                   disabled={addedWords.has(selectedWord)}
                   className="w-full"
+                  variant={addedWords.has(selectedWord) ? "secondary" : "default"}
                 >
                   <BookPlus className="w-4 h-4 mr-1" />
-                  {addedWords.has(selectedWord) ? '已加入生词本' : '加入生词本'}
+                  {addedWords.has(selectedWord) ? '已收藏' : '收藏到生词本'}
                 </Button>
               </>
             )}

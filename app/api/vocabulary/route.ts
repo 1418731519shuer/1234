@@ -5,9 +5,10 @@ import prisma from '@/lib/db'
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const category = searchParams.get('category')
+    const favorites = searchParams.get('favorites')
     
-    const where = category ? { category } : {}
+    // 如果请求收藏列表，只返回收藏的词
+    const where = favorites === 'true' ? { isFavorite: true } : {}
     
     const vocabularies = await prisma.vocabulary.findMany({
       where,
@@ -22,48 +23,38 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/vocabulary - 添加词汇
+// POST /api/vocabulary - 收藏/取消收藏词汇
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { word, meaning, context, articleId, category = 'word' } = body
+    const { word, isFavorite } = body
     
-    if (!word || !meaning) {
-      return NextResponse.json({ error: '单词和释义不能为空' }, { status: 400 })
+    if (!word) {
+      return NextResponse.json({ error: '单词不能为空' }, { status: 400 })
     }
     
-    // 检查是否已存在
+    // 查找词汇
     const existing = await prisma.vocabulary.findUnique({
       where: { word },
     })
     
-    if (existing) {
-      // 更新复习次数
-      const updated = await prisma.vocabulary.update({
-        where: { word },
-        data: {
-          reviewCount: { increment: 1 },
-          lastReviewAt: new Date(),
-        },
-      })
-      return NextResponse.json({ vocabulary: updated, isNew: false })
+    if (!existing) {
+      return NextResponse.json({ error: '词汇不存在' }, { status: 404 })
     }
     
-    // 创建新词汇
-    const vocabulary = await prisma.vocabulary.create({
+    // 切换收藏状态
+    const vocabulary = await prisma.vocabulary.update({
+      where: { word },
       data: {
-        word,
-        meaning,
-        context,
-        articleId,
-        category,
+        isFavorite: isFavorite !== undefined ? isFavorite : !existing.isFavorite,
+        lastReviewAt: new Date(),
       },
     })
     
-    return NextResponse.json({ vocabulary, isNew: true })
+    return NextResponse.json({ vocabulary, isFavorite: vocabulary.isFavorite })
   } catch (error) {
-    console.error('Add vocabulary error:', error)
-    return NextResponse.json({ error: '添加词汇失败' }, { status: 500 })
+    console.error('Toggle favorite error:', error)
+    return NextResponse.json({ error: '操作失败' }, { status: 500 })
   }
 }
 
