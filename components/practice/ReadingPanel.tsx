@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { 
@@ -304,14 +303,14 @@ export default function ReadingPanel({
       </div>
       
       {/* 文章内容 */}
-      <ScrollArea className={`flex-1 p-6 ${eyeCareMode ? 'bg-[#f7f3e3]' : 'bg-white'}`}>
+      <div className={`flex-1 min-h-0 overflow-y-auto p-6 ${eyeCareMode ? 'bg-[#f7f3e3]' : 'bg-white'}`}>
         <div
           className={`prose prose-sm max-w-none select-text ${isMarkingMode ? 'cursor-crosshair' : 'cursor-text'} ${eyeCareMode ? 'text-[#3d3d3d]' : 'text-gray-800'}`}
           onMouseUp={handleMouseUp}
         >
           {showTranslation && translation.length > 0 ? renderTranslation() : renderContent()}
         </div>
-      </ScrollArea>
+      </div>
       
       {/* 底部工具栏 */}
       <div className={`p-3 border-t ${eyeCareMode ? 'bg-[#f0ebe0]' : 'bg-gray-50'}`}>

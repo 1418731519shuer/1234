@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Textarea } from '@/components/ui/textarea'
 import { 
   Send, 
@@ -346,7 +345,7 @@ export default function AIChatPanel({
       </div>
       
       {/* 消息列表 */}
-      <ScrollArea className="flex-1 p-4" ref={scrollRef}>
+      <div className="flex-1 min-h-0 overflow-y-auto p-4" ref={scrollRef}>
         {messages.length === 0 ? (
           <div className="text-center py-8">
             <p className="text-emerald-600 text-sm mb-4">有什么问题想问我？</p>
@@ -400,7 +399,7 @@ export default function AIChatPanel({
             )}
           </div>
         )}
-      </ScrollArea>
+      </div>
       
       {/* 输入区 */}
       <div className="p-3 border-t border-emerald-100">
