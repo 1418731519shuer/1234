@@ -263,8 +263,8 @@ export default function PracticePage({ params }: { params: Promise<{ id: string 
         
         {/* 主内容区 - 三栏布局 */}
         <div className="flex h-[calc(100vh-57px)] overflow-hidden">
-          {/* 左侧文章 */}
-          <div className="w-[35%] min-w-0 border-r border-slate-200 bg-white overflow-hidden">
+          {/* 左侧文章 - 50% */}
+          <div className="w-1/2 border-r border-slate-200 bg-white flex flex-col min-h-0 overflow-hidden">
             <ReadingPanel
               content={article.content}
               title={article.title}
@@ -279,10 +279,12 @@ export default function PracticePage({ params }: { params: Promise<{ id: string 
             />
           </div>
           
-          {/* 中间题目解析 */}
-          <div className="w-[30%] min-w-0 border-r border-slate-200 bg-slate-50 overflow-y-auto">
-            <div className="p-4">
-              <h2 className="font-semibold text-slate-800 mb-4">题目解析</h2>
+          {/* 中间题目解析 - 25% */}
+          <div className="w-1/4 border-r border-slate-200 bg-slate-50 flex flex-col min-h-0 overflow-hidden">
+            <div className="p-3 border-b bg-white">
+              <h2 className="font-semibold text-slate-800">题目解析</h2>
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto p-3">
               <div className="space-y-3">
                 {article.questions.map((q, i) => {
                   const isCorrect = answers[q.id] === q.correctAnswer
@@ -360,8 +362,8 @@ export default function PracticePage({ params }: { params: Promise<{ id: string 
             </div>
           </div>
           
-          {/* 右侧AI问答 */}
-          <div className="w-[35%] min-w-0 bg-white overflow-hidden">
+          {/* 右侧AI问答 - 25% */}
+          <div className="w-1/4 bg-white flex flex-col min-h-0 overflow-hidden">
             <AIChatPanel
               articleTitle={article.title}
               articleContent={article.content}
