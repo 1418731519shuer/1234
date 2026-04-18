@@ -179,7 +179,13 @@ export default function QuestionPanel({
           <CardContent>
             <RadioGroup
               value={answers[currentQuestion.id] || ''}
-              onValueChange={(value) => onAnswer(currentQuestion.id, value)}
+              onValueChange={(value) => {
+                onAnswer(currentQuestion.id, value)
+                // 选择后自动跳到下一题（如果不是最后一题）
+                if (currentIndex < questions.length - 1) {
+                  setTimeout(() => onNavigate(currentIndex + 1), 300)
+                }
+              }}
               disabled={isSubmitted}
               className="space-y-3"
             >
