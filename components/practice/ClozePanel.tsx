@@ -3,48 +3,49 @@
 import { useState, useCallback, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { 
-  Sun,
-  Moon,
-  BookPlus,
-  X,
-  Loader2
-} from 'lucide-react'
+import { Sun, Moon, BookPlus, X, Loader2 } from 'lucide-react'
 
-interface SevenFivePanelProps {
+interface ClozeBlank {
+  blankNum: number
+  correctAnswer: string
+  options: {
+    A: string
+    B: string
+    C: string
+    D: string
+  }
+  analysis?: string
+}
+
+interface ClozePanelProps {
   content: string
   title: string
-  options: Array<{ key: string; content: string }>  // A-G段落
-  blanks: number[]  // 空位编号 [41, 42, 43, 44, 45]
-  answers: Record<number, string>  // 空位 -> 选项
+  blanks: ClozeBlank[]
+  answers: Record<number, string>  // blankNum -> optionKey
+  currentBlank: number | null
+  onSelectBlank: (blankNum: number) => void
   isSubmitted: boolean
-  correctAnswers?: Record<number, string>
   articleId?: string
-  onAskAI?: (question: string) => void
 }
 
-// 每个选项独立的颜色
-const OPTION_COLORS: Record<string, { bg: string; border: string; text: string; light: string }> = {
-  'A': { bg: '#fef3c7', border: '#f59e0b', text: '#92400e', light: '#fffbeb' },
-  'B': { bg: '#dbeafe', border: '#3b82f6', text: '#1e40af', light: '#eff6ff' },
-  'C': { bg: '#dcfce7', border: '#22c55e', text: '#166534', light: '#f0fdf4' },
-  'D': { bg: '#fce7f3', border: '#ec4899', text: '#9d174d', light: '#fdf2f8' },
-  'E': { bg: '#e0e7ff', border: '#6366f1', text: '#3730a3', light: '#eef2ff' },
-  'F': { bg: '#fed7aa', border: '#f97316', text: '#9a3412', light: '#fff7ed' },
-  'G': { bg: '#d1fae5', border: '#10b981', text: '#065f46', light: '#ecfdf5' },
+// 护眼模式颜色
+const OPTION_COLORS: Record<string, string> = {
+  'A': '#fef3c7',
+  'B': '#dbeafe',
+  'C': '#dcfce7',
+  'D': '#fce7f3',
 }
 
-export default function SevenFivePanel({
+export default function ClozePanel({
   content,
   title,
-  options,
   blanks,
   answers,
+  currentBlank,
+  onSelectBlank,
   isSubmitted,
-  correctAnswers,
   articleId,
-  onAskAI,
-}: SevenFivePanelProps) {
+}: ClozePanelProps) {
   const [eyeCareMode, setEyeCareMode] = useState(true)
   const contentRef = useRef<HTMLDivElement>(null)
   
@@ -103,91 +104,105 @@ export default function SevenFivePanel({
   
   // 渲染文章内容，标记空位
   const renderContent = () => {
-    const paragraphs = content.split('\n\n')
+    const gapPattern = /\[(\d+)\]|\((\d+)\)|_{2,}(\d+)_{2,}|（(\d+)）/g
+    const elements: React.ReactNode[] = []
+    let lastIndex = 0
+    let match
     
-    return paragraphs.map((paragraph, pIndex) => {
-      // 匹配空位标记
-      const gapPattern = /\((\d+)\)|\[(\d+)\]|_{2,}(\d+)_{2,}|（(\d+)）/g
-      const elements: React.ReactNode[] = []
-      let lastIndex = 0
-      let match
+    while ((match = gapPattern.exec(content)) !== null) {
+      const blankNum = parseInt(match[1] || match[2] || match[3] || match[4])
+      const matchStart = match.index
+      const matchEnd = matchStart + match[0].length
       
-      while ((match = gapPattern.exec(paragraph)) !== null) {
-        const gapNum = parseInt(match[1] || match[2] || match[3] || match[4])
-        
-        // 只处理41-45的空位
-        if (gapNum >= 41 && gapNum <= 45) {
-          const matchStart = match.index
-          const matchEnd = matchStart + match[0].length
-          
-          // 添加前面的文本
-          if (matchStart > lastIndex) {
-            elements.push(
-              <span key={`text-${pIndex}-${lastIndex}`}>{paragraph.slice(lastIndex, matchStart)}</span>
-            )
-          }
-          
-          const answer = answers[gapNum]
-          const isCorrect = isSubmitted && correctAnswers && answer === correctAnswers[gapNum]
-          const isWrong = isSubmitted && correctAnswers && answer && answer !== correctAnswers[gapNum]
-          const colorStyle = answer ? OPTION_COLORS[answer] : null
-          
-          elements.push(
-            <span
-              key={`gap-${pIndex}-${gapNum}`}
-              className="inline-flex items-center mx-1"
-            >
-              <span
-                className="px-4 py-2 rounded-lg font-medium text-sm border-2 transition-all"
-                style={{
-                  background: isSubmitted 
-                    ? (isCorrect ? '#d1fae5' : isWrong ? '#fee2e2' : colorStyle?.light || '#f3f4f6')
-                    : colorStyle?.light || '#f3f4f6',
-                  borderColor: isSubmitted 
-                    ? (isCorrect ? '#10b981' : isWrong ? '#ef4444' : colorStyle?.border || '#d1d5db')
-                    : colorStyle?.border || '#d1d5db',
-                  color: colorStyle?.text || '#6b7280',
-                }}
-              >
-                {answer ? `[${answer}]` : `(${gapNum - 40})`}
-                {isSubmitted && isWrong && correctAnswers && (
-                  <span className="ml-2 text-xs opacity-70">正确: {correctAnswers[gapNum]}</span>
-                )}
-              </span>
-            </span>
-          )
-          
-          lastIndex = matchEnd
-        }
-      }
-      
-      // 添加剩余文本
-      if (lastIndex < paragraph.length) {
+      // 添加前面的文本
+      if (matchStart > lastIndex) {
         elements.push(
-          <span key={`text-end-${pIndex}`}>{paragraph.slice(lastIndex)}</span>
+          <span key={`text-${lastIndex}`}>{content.slice(lastIndex, matchStart)}</span>
         )
       }
       
-      if (elements.length > 0) {
-        return (
-          <p key={pIndex} className="mb-6 leading-loose text-[17px]">
-            {elements}
-          </p>
-        )
-      }
+      const answer = answers[blankNum]
+      const blank = blanks.find(b => b.blankNum === blankNum)
+      const isCorrect = isSubmitted && blank && answer === blank.correctAnswer
+      const isWrong = isSubmitted && blank && answer && answer !== blank.correctAnswer
+      const isCurrent = currentBlank === blankNum
       
-      return (
-        <p key={pIndex} className="mb-6 leading-loose text-[17px]">
-          {paragraph}
+      elements.push(
+        <span
+          key={`blank-${blankNum}`}
+          className="inline-flex items-center mx-0.5 cursor-pointer"
+          onClick={() => !isSubmitted && onSelectBlank(blankNum)}
+        >
+          <span
+            className="px-3 py-1 rounded-lg font-medium text-sm border-2 transition-all min-w-[50px] text-center"
+            style={{
+              background: isSubmitted 
+                ? (isCorrect ? '#d1fae5' : isWrong ? '#fee2e2' : answer ? OPTION_COLORS[answer] : '#f3f4f6')
+                : isCurrent ? '#bfdbfe' : answer ? OPTION_COLORS[answer] : '#f3f4f6',
+              borderColor: isSubmitted 
+                ? (isCorrect ? '#10b981' : isWrong ? '#ef4444' : answer ? '#3b82f6' : '#d1d5db')
+                : isCurrent ? '#3b82f6' : answer ? '#3b82f6' : '#d1d5db',
+              color: answer ? '#1e3a5f' : '#6b7280',
+              boxShadow: isCurrent ? '0 0 0 2px rgba(59, 130, 246, 0.3)' : 'none',
+            }}
+          >
+            {answer || `[${blankNum}]`}
+          </span>
+        </span>
+      )
+      
+      lastIndex = matchEnd
+    }
+    
+    // 添加剩余文本
+    if (lastIndex < content.length) {
+      elements.push(
+        <span key={`text-end`}>{content.slice(lastIndex)}</span>
+      )
+    }
+    
+    // 按段落分割
+    const fullText = elements.length > 0 ? elements : [content]
+    const paragraphs: React.ReactNode[] = []
+    let currentParagraph: React.ReactNode[] = []
+    let pKey = 0
+    
+    fullText.forEach((el, i) => {
+      if (typeof el === 'string' && el.includes('\n\n')) {
+        const parts = el.split('\n\n')
+        parts.forEach((part, j) => {
+          if (j > 0 && currentParagraph.length > 0) {
+            paragraphs.push(
+              <p key={`p-${pKey++}`} className="mb-6 leading-loose text-[17px]">
+                {currentParagraph}
+              </p>
+            )
+            currentParagraph = []
+          }
+          if (part) currentParagraph.push(<span key={`part-${i}-${j}`}>{part}</span>)
+        })
+      } else {
+        currentParagraph.push(el)
+      }
+    })
+    
+    if (currentParagraph.length > 0) {
+      paragraphs.push(
+        <p key={`p-${pKey}`} className="mb-6 leading-loose text-[17px]">
+          {currentParagraph}
         </p>
       )
-    })
+    }
+    
+    return paragraphs.length > 0 ? paragraphs : (
+      <p className="mb-6 leading-loose text-[17px]">{fullText}</p>
+    )
   }
   
   // 计算统计
   const answeredCount = Object.keys(answers).length
-  const correctCount = isSubmitted && correctAnswers
-    ? blanks.filter(b => answers[b] === correctAnswers[b]).length 
+  const correctCount = isSubmitted 
+    ? blanks.filter(b => answers[b.blankNum] === b.correctAnswer).length 
     : 0
 
   return (
@@ -239,20 +254,20 @@ export default function SevenFivePanel({
             className="text-xs"
             style={eyeCareMode ? { borderColor: '#81C784', color: '#388E3C' } : {}}
           >
-            七选五
+            完型填空
           </Badge>
           <Badge 
             className="text-xs"
             style={eyeCareMode ? { background: '#C8E6C9', color: '#2E7D32' } : { background: '#d1fae5', color: '#065f46' }}
           >
-            {answeredCount}/5 已选
+            {answeredCount}/20 已选
           </Badge>
           {isSubmitted && (
             <Badge 
               className="text-white text-xs"
-              style={{ background: correctCount === 5 ? '#10b981' : '#ef4444' }}
+              style={{ background: correctCount >= 12 ? '#10b981' : '#ef4444' }}
             >
-              正确 {correctCount}/5
+              正确 {correctCount}/20
             </Badge>
           )}
         </div>
@@ -346,28 +361,29 @@ export default function SevenFivePanel({
           borderColor: eyeCareMode ? '#A5D6A7' : '#e5e7eb'
         }}
       >
-        <div className="flex items-center gap-2 flex-wrap">
-          {blanks.sort((a, b) => a - b).map(blankNum => {
-            const answer = answers[blankNum]
-            const colorStyle = answer ? OPTION_COLORS[answer] : null
-            const isCorrect = isSubmitted && correctAnswers && answer === correctAnswers[blankNum]
-            const isWrong = isSubmitted && correctAnswers && answer && answer !== correctAnswers[blankNum]
+        <div className="flex items-center gap-1 flex-wrap">
+          {blanks.sort((a, b) => a.blankNum - b.blankNum).map(blank => {
+            const answer = answers[blank.blankNum]
+            const isCorrect = isSubmitted && answer === blank.correctAnswer
+            const isWrong = isSubmitted && answer && answer !== blank.correctAnswer
+            const isCurrent = currentBlank === blank.blankNum
             
             return (
               <div
-                key={blankNum}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium border-2"
+                key={blank.blankNum}
+                className="flex items-center gap-0.5 px-2 py-1 rounded text-xs font-medium border transition-all cursor-pointer"
                 style={{
                   background: isSubmitted 
-                    ? (isCorrect ? '#d1fae5' : isWrong ? '#fee2e2' : colorStyle?.light || '#f3f4f6')
-                    : colorStyle?.light || '#f3f4f6',
+                    ? (isCorrect ? '#d1fae5' : isWrong ? '#fee2e2' : answer ? OPTION_COLORS[answer] : '#f3f4f6')
+                    : isCurrent ? '#bfdbfe' : answer ? OPTION_COLORS[answer] : '#f3f4f6',
                   borderColor: isSubmitted 
-                    ? (isCorrect ? '#10b981' : isWrong ? '#ef4444' : colorStyle?.border || '#d1d5db')
-                    : colorStyle?.border || '#d1d5db',
-                  color: colorStyle?.text || '#6b7280',
+                    ? (isCorrect ? '#10b981' : isWrong ? '#ef4444' : answer ? '#3b82f6' : '#d1d5db')
+                    : isCurrent ? '#3b82f6' : answer ? '#3b82f6' : '#d1d5db',
+                  color: answer ? '#1e3a5f' : '#6b7280',
                 }}
+                onClick={() => !isSubmitted && onSelectBlank(blank.blankNum)}
               >
-                <span className="text-xs opacity-70">{blankNum - 40}.</span>
+                <span className="opacity-60">{blank.blankNum}.</span>
                 <span>{answer || '_'}</span>
               </div>
             )

@@ -2,33 +2,19 @@
 
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 
-interface SevenFiveOption {
-  id: string
-  optionKey: string
-  content: string
-}
-
-interface SevenFiveQuestion {
-  id: string
-  questionNum: number
-  stem: string
-  correctAnswer: string
-  analysis?: string
-}
-
 interface SevenFiveQuestionPanelProps {
-  options: SevenFiveOption[]
-  questions: SevenFiveQuestion[]
-  answers: Record<number, string>
-  currentIndex: number
+  options: Array<{ key: string; content: string }>  // A-G段落
+  blanks: number[]  // 空位编号 [41, 42, 43, 44, 45]
+  answers: Record<number, string>  // 空位 -> 选项
+  currentIndex: number  // 当前选中的空位索引
   onNavigate: (index: number) => void
-  onAnswer: (questionNum: number, answer: string) => void
-  onClearAnswer: (questionNum: number) => void
+  onAnswer: (blankNum: number, optionKey: string) => void
+  onClearAnswer: (blankNum: number) => void
   onSubmit: () => void
   isSubmitted: boolean
+  correctAnswers?: Record<number, string>
   onAskAI?: (question: string) => void
 }
 
@@ -45,7 +31,7 @@ const OPTION_COLORS: Record<string, { bg: string; border: string; text: string; 
 
 export default function SevenFiveQuestionPanel({
   options,
-  questions,
+  blanks,
   answers,
   currentIndex,
   onNavigate,
@@ -53,43 +39,43 @@ export default function SevenFiveQuestionPanel({
   onClearAnswer,
   onSubmit,
   isSubmitted,
+  correctAnswers,
   onAskAI,
 }: SevenFiveQuestionPanelProps) {
-  // 当前题目
-  const currentQ = questions[currentIndex]
-  const currentAnswer = currentQ ? answers[currentQ.questionNum] : null
+  const currentBlank = blanks[currentIndex]
+  const currentAnswer = currentBlank ? answers[currentBlank] : null
   
   // 检查选项是否已被使用
-  const isOptionUsed = (optionKey: string, excludeNum?: number) => {
-    return Object.entries(answers).some(([num, ans]) => 
-      ans === optionKey && parseInt(num) !== excludeNum
+  const isOptionUsed = (optionKey: string, excludeBlank?: number) => {
+    return Object.entries(answers).some(([blank, ans]) => 
+      ans === optionKey && parseInt(blank) !== excludeBlank
     )
   }
   
   // 选择选项
   const handleSelectOption = (optionKey: string) => {
-    if (isSubmitted || !currentQ) return
-    onAnswer(currentQ.questionNum, optionKey)
+    if (isSubmitted || !currentBlank) return
+    onAnswer(currentBlank, optionKey)
   }
   
   // 清除当前选择
   const handleClearAnswer = () => {
-    if (isSubmitted || !currentQ) return
-    onClearAnswer(currentQ.questionNum)
+    if (isSubmitted || !currentBlank) return
+    onClearAnswer(currentBlank)
   }
   
   // 计算统计
   const answeredCount = Object.keys(answers).length
-  const correctCount = isSubmitted 
-    ? questions.filter(q => answers[q.questionNum] === q.correctAnswer).length 
+  const correctCount = isSubmitted && correctAnswers
+    ? blanks.filter(b => answers[b] === correctAnswers[b]).length 
     : 0
   
   return (
-    <div className="h-full flex flex-col bg-slate-50">
+    <div className="h-full flex flex-col bg-slate-50" style={{ minHeight: 0 }}>
       {/* 题目导航 */}
       <div className="p-3 border-b bg-white flex-shrink-0">
         <div className="flex items-center justify-between mb-2">
-          <h2 className="font-semibold text-slate-800">题目选择</h2>
+          <h2 className="font-semibold text-slate-800">选择段落</h2>
           {isSubmitted && (
             <Badge className={`${correctCount === 5 ? 'bg-emerald-500' : 'bg-red-400'} text-white`}>
               {correctCount}/5
@@ -97,15 +83,15 @@ export default function SevenFiveQuestionPanel({
           )}
         </div>
         <div className="flex gap-2">
-          {questions.sort((a, b) => a.questionNum - b.questionNum).map((q, i) => {
-            const answer = answers[q.questionNum]
+          {blanks.sort((a, b) => a - b).map((blank, i) => {
+            const answer = answers[blank]
             const colorStyle = answer ? OPTION_COLORS[answer] : null
-            const isCorrect = isSubmitted && answer === q.correctAnswer
-            const isWrong = isSubmitted && answer && answer !== q.correctAnswer
+            const isCorrect = isSubmitted && correctAnswers && answer === correctAnswers[blank]
+            const isWrong = isSubmitted && correctAnswers && answer && answer !== correctAnswers[blank]
             
             return (
               <button
-                key={q.id}
+                key={blank}
                 className="w-10 h-10 rounded-lg text-sm font-medium transition-all border-2"
                 style={{
                   background: isSubmitted 
@@ -118,18 +104,18 @@ export default function SevenFiveQuestionPanel({
                 }}
                 onClick={() => onNavigate(i)}
               >
-                {q.questionNum - 40}
+                {blank - 40}
               </button>
             )
           })}
         </div>
       </div>
       
-      {/* 当前题目信息 */}
+      {/* 当前空位信息 */}
       <div className="p-3 border-b bg-white flex-shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="font-medium text-slate-800">第 {currentQ?.questionNum ? currentQ.questionNum - 40 : '?'} 空</span>
+            <span className="font-medium text-slate-800">第 {currentBlank ? currentBlank - 40 : '?'} 空</span>
             {currentAnswer && (
               <Badge 
                 className="font-medium"
@@ -143,31 +129,26 @@ export default function SevenFiveQuestionPanel({
             )}
           </div>
           {currentAnswer && !isSubmitted && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleClearAnswer}
-              className="text-xs"
-            >
+            <Button variant="ghost" size="sm" onClick={handleClearAnswer} className="text-xs">
               清除
             </Button>
           )}
         </div>
       </div>
       
-      {/* 选项列表 */}
+      {/* 选项列表 A-G */}
       <div className="flex-1 overflow-y-auto p-3" style={{ minHeight: 0 }}>
-        <div className="text-xs uppercase tracking-wider mb-3 text-slate-400">选择段落 (A-G)</div>
+        <div className="text-xs uppercase tracking-wider mb-3 text-slate-400">段落选项 (A-G)</div>
         <div className="space-y-2">
-          {options.sort((a, b) => a.optionKey.localeCompare(b.optionKey)).map(opt => {
-            const isUsed = isOptionUsed(opt.optionKey, currentQ?.questionNum)
-            const isSelected = currentAnswer === opt.optionKey
-            const colorStyle = OPTION_COLORS[opt.optionKey]
-            const isCorrectOption = isSubmitted && currentQ?.correctAnswer === opt.optionKey
+          {options.sort((a, b) => a.key.localeCompare(b.key)).map(opt => {
+            const isUsed = isOptionUsed(opt.key, currentBlank)
+            const isSelected = currentAnswer === opt.key
+            const colorStyle = OPTION_COLORS[opt.key]
+            const isCorrectOption = isSubmitted && correctAnswers && currentBlank && correctAnswers[currentBlank] === opt.key
             
             return (
               <button
-                key={opt.id}
+                key={opt.key}
                 className="w-full text-left p-3 rounded-xl transition-all border-2"
                 style={{
                   background: isSubmitted 
@@ -178,7 +159,7 @@ export default function SevenFiveQuestionPanel({
                     : isSelected ? colorStyle?.border : isUsed ? '#d1d5db' : '#e5e7eb',
                   opacity: isUsed && !isSelected ? 0.5 : 1,
                 }}
-                onClick={() => !isSubmitted && !isUsed && handleSelectOption(opt.optionKey)}
+                onClick={() => !isSubmitted && !isUsed && handleSelectOption(opt.key)}
                 disabled={isSubmitted || (isUsed && !isSelected)}
               >
                 <div className="flex items-start gap-2">
@@ -186,13 +167,13 @@ export default function SevenFiveQuestionPanel({
                     className="w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 text-white"
                     style={{ background: colorStyle?.border }}
                   >
-                    {opt.optionKey}
+                    {opt.key}
                   </span>
                   <span 
                     className="text-sm leading-relaxed"
                     style={{ color: isSelected || isCorrectOption ? colorStyle?.text : '#374151' }}
                   >
-                    {opt.content.length > 120 ? opt.content.slice(0, 120) + '...' : opt.content}
+                    {opt.content.length > 150 ? opt.content.slice(0, 150) + '...' : opt.content}
                   </span>
                 </div>
                 {isUsed && !isSelected && !isSubmitted && (
@@ -204,7 +185,7 @@ export default function SevenFiveQuestionPanel({
         </div>
       </div>
       
-      {/* 提交按钮或解析 */}
+      {/* 提交按钮 */}
       <div className="p-3 border-t bg-white flex-shrink-0">
         {!isSubmitted ? (
           <>
@@ -222,22 +203,15 @@ export default function SevenFiveQuestionPanel({
             )}
           </>
         ) : (
-          <div className="space-y-2">
-            {currentQ?.analysis && (
-              <div className="p-3 bg-blue-50 rounded-lg text-sm text-blue-700">
-                <span className="font-medium">解析：</span>{currentQ.analysis}
-              </div>
-            )}
-            {onAskAI && currentQ && (
-              <Button
-                variant="outline"
-                className="w-full text-emerald-600 border-emerald-200 hover:bg-emerald-50"
-                onClick={() => onAskAI(`请帮我详细解析第${currentQ.questionNum - 40}空的七选五题目`)}
-              >
-                <span className="mr-1">🐱</span> 问AI助教
-              </Button>
-            )}
-          </div>
+          onAskAI && currentBlank && (
+            <Button
+              variant="outline"
+              className="w-full text-emerald-600 border-emerald-200 hover:bg-emerald-50"
+              onClick={() => onAskAI(`请帮我详细解析七选五第${currentBlank - 40}空的选择技巧`)}
+            >
+              <span className="mr-1">🐱</span> 问AI助教
+            </Button>
+          )
         )}
       </div>
     </div>

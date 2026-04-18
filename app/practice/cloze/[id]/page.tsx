@@ -2,12 +2,24 @@
 
 import { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
-import SevenFivePanel from '@/components/practice/SevenFivePanel'
-import SevenFiveQuestionPanel from '@/components/practice/SevenFiveQuestionPanel'
+import ClozePanel from '@/components/practice/ClozePanel'
+import ClozeQuestionPanel from '@/components/practice/ClozeQuestionPanel'
 import AIChatPanel from '@/components/practice/AIChatPanel'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Home, Loader2 } from 'lucide-react'
+
+interface ClozeBlank {
+  blankNum: number
+  correctAnswer: string
+  options: {
+    A: string
+    B: string
+    C: string
+    D: string
+  }
+  analysis?: string
+}
 
 interface Article {
   id: string
@@ -30,13 +42,13 @@ interface Article {
   }>
 }
 
-export default function SevenFivePracticePage({ params }: { params: Promise<{ id: string }> }) {
+export default function ClozePracticePage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params)
   const router = useRouter()
   
   const [article, setArticle] = useState<Article | null>(null)
   const [loading, setLoading] = useState(true)
-  const [currentIndex, setCurrentIndex] = useState(0)
+  const [currentBlank, setCurrentBlank] = useState<number | null>(null)
   const [answers, setAnswers] = useState<Record<number, string>>({})
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [startTime] = useState(new Date())
@@ -57,6 +69,11 @@ export default function SevenFivePracticePage({ params }: { params: Promise<{ id
         })
         const practice = await practiceRes.json()
         setPracticeId(practice.id)
+        
+        // 默认选中第一个空位
+        if (data.questions && data.questions.length > 0) {
+          setCurrentBlank(data.questions[0].questionNum)
+        }
       } catch (error) {
         console.error('Load article error:', error)
       } finally {
@@ -67,21 +84,31 @@ export default function SevenFivePracticePage({ params }: { params: Promise<{ id
     fetchArticle()
   }, [resolvedParams.id])
   
+  const handleSelectBlank = (blankNum: number) => {
+    setCurrentBlank(blankNum)
+  }
+  
   const handleAnswer = (blankNum: number, optionKey: string) => {
     setAnswers(prev => ({ ...prev, [blankNum]: optionKey }))
-  }
-  
-  const handleClearAnswer = (blankNum: number) => {
-    setAnswers(prev => {
-      const newAnswers = { ...prev }
-      delete newAnswers[blankNum]
-      return newAnswers
-    })
-  }
-  
-  const handleNavigate = (index: number) => {
-    if (index >= 0 && index < 5) {
-      setCurrentIndex(index)
+    
+    // 选择后自动跳到下一个未答的空位
+    const blanks = article?.questions.map(q => q.questionNum).sort((a, b) => a - b) || []
+    const currentIndex = blanks.indexOf(blankNum)
+    
+    // 找下一个未答的空位
+    for (let i = currentIndex + 1; i < blanks.length; i++) {
+      if (!answers[blanks[i]]) {
+        setTimeout(() => setCurrentBlank(blanks[i]), 200)
+        return
+      }
+    }
+    
+    // 如果后面都答了，找前面未答的
+    for (let i = 0; i < currentIndex; i++) {
+      if (!answers[blanks[i]]) {
+        setTimeout(() => setCurrentBlank(blanks[i]), 200)
+        return
+      }
     }
   }
   
@@ -131,45 +158,20 @@ export default function SevenFivePracticePage({ params }: { params: Promise<{ id
     )
   }
   
-  // 提取七选五选项（A-G段落）- 从题目的选项中提取
-  // 七选五的选项应该是7个段落，每个段落对应一个字母
-  const sevenFiveOptions: Array<{ key: string; content: string }> = []
-  const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G']
+  // 转换为完型填空格式
+  const blanks: ClozeBlank[] = article.questions.map(q => ({
+    blankNum: q.questionNum,
+    correctAnswer: q.correctAnswer,
+    options: {
+      A: q.options.find(o => o.optionKey === 'A')?.content || '',
+      B: q.options.find(o => o.optionKey === 'B')?.content || '',
+      C: q.options.find(o => o.optionKey === 'C')?.content || '',
+      D: q.options.find(o => o.optionKey === 'D')?.content || '',
+    },
+    analysis: q.analysis,
+  }))
   
-  // 尝试从第一个题目提取选项
-  const firstQuestion = article.questions.find(q => q.questionNum >= 41 && q.questionNum <= 45)
-  if (firstQuestion) {
-    letters.forEach(letter => {
-      const opt = firstQuestion.options.find(o => o.optionKey === letter)
-      if (opt) {
-        sevenFiveOptions.push({ key: letter, content: opt.content })
-      }
-    })
-  }
-  
-  // 如果选项不足7个，生成模拟数据
-  if (sevenFiveOptions.length < 7) {
-    sevenFiveOptions.length = 0
-    letters.forEach(letter => {
-      sevenFiveOptions.push({
-        key: letter,
-        content: `[${letter}] This is a sample paragraph for option ${letter}. In a real exam, this would be a meaningful paragraph that fits into one of the blanks in the article.`
-      })
-    })
-  }
-  
-  // 提取七选五空位编号（41-45）
-  const blanks = [41, 42, 43, 44, 45]
-  
-  // 提取正确答案
-  const correctAnswers: Record<number, string> = {}
-  article.questions
-    .filter(q => q.questionNum >= 41 && q.questionNum <= 45)
-    .forEach(q => {
-      correctAnswers[q.questionNum] = q.correctAnswer
-    })
-  
-  const correctCount = blanks.filter(b => answers[b] === correctAnswers[b]).length
+  const correctCount = blanks.filter(b => answers[b.blankNum] === b.correctAnswer).length
   
   return (
     <div className="min-h-screen bg-slate-50">
@@ -185,10 +187,10 @@ export default function SevenFivePracticePage({ params }: { params: Promise<{ id
             <h1 className="font-medium text-slate-700 truncate max-w-lg">{article.title}</h1>
           </div>
           <div className="flex items-center gap-3">
-            <Badge variant="outline" className="text-sm">七选五</Badge>
+            <Badge variant="outline" className="text-sm">完型填空</Badge>
             {isSubmitted && (
-              <Badge className={`${correctCount === 5 ? 'bg-emerald-500' : 'bg-red-400'} text-white text-sm`}>
-                {correctCount}/5
+              <Badge className={`${correctCount >= 12 ? 'bg-emerald-500' : 'bg-red-400'} text-white text-sm`}>
+                {correctCount}/20
               </Badge>
             )}
           </div>
@@ -202,35 +204,31 @@ export default function SevenFivePracticePage({ params }: { params: Promise<{ id
           className="border-r border-slate-200"
           style={{ width: '50%', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
         >
-          <SevenFivePanel
+          <ClozePanel
             content={article.content}
             title={article.title}
-            options={sevenFiveOptions}
             blanks={blanks}
             answers={answers}
+            currentBlank={currentBlank}
+            onSelectBlank={handleSelectBlank}
             isSubmitted={isSubmitted}
-            correctAnswers={correctAnswers}
             articleId={article.id}
-            onAskAI={handleAskAI}
           />
         </div>
         
-        {/* 中间题目解析 - 25% */}
+        {/* 中间题目选项 - 25% */}
         <div 
           className="border-r border-slate-200 bg-slate-50"
           style={{ width: '25%', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
         >
-          <SevenFiveQuestionPanel
-            options={sevenFiveOptions}
+          <ClozeQuestionPanel
             blanks={blanks}
             answers={answers}
-            currentIndex={currentIndex}
-            onNavigate={handleNavigate}
+            currentBlank={currentBlank}
+            onSelectBlank={handleSelectBlank}
             onAnswer={handleAnswer}
-            onClearAnswer={handleClearAnswer}
             onSubmit={handleSubmit}
             isSubmitted={isSubmitted}
-            correctAnswers={correctAnswers}
             onAskAI={handleAskAI}
           />
         </div>
@@ -243,11 +241,11 @@ export default function SevenFivePracticePage({ params }: { params: Promise<{ id
           <AIChatPanel
             articleTitle={article.title}
             articleContent={article.content}
-            questions={article.questions.filter(q => q.questionNum >= 41 && q.questionNum <= 45).map(q => ({
+            questions={article.questions.map(q => ({
               ...q,
               userAnswer: answers[q.questionNum],
             }))}
-            currentQuestionIndex={currentIndex}
+            currentQuestionIndex={currentBlank ? article.questions.findIndex(q => q.questionNum === currentBlank) : 0}
             answers={answers}
             isSubmitted={isSubmitted}
             onSaveChat={async () => {}}

@@ -92,9 +92,9 @@ export default function QuestionPanel({
   }
 
   return (
-    <div className="h-full flex flex-col bg-white">
+    <div className="h-full flex flex-col bg-white" style={{ minHeight: 0 }}>
       {/* 顶部状态栏 */}
-      <div className="p-4 border-b bg-gray-50">
+      <div className="p-4 border-b bg-gray-50 flex-shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Badge variant="outline" className="text-sm">
@@ -118,7 +118,7 @@ export default function QuestionPanel({
       </div>
       
       {/* 题目导航 */}
-      <div className="p-3 border-b">
+      <div className="p-3 border-b flex-shrink-0">
         <div className="flex gap-2 justify-center flex-wrap">
           {questions.map((q, index) => {
             const color = COLORS[index % COLORS.length]
@@ -158,7 +158,7 @@ export default function QuestionPanel({
       </div>
       
       {/* 当前题目 */}
-      <div className="flex-1 overflow-y-auto p-4" style={{ minHeight: 0 }}>
+      <div className="flex-1 overflow-y-auto p-4" style={{ minHeight: 0, flexShrink: 1 }}>
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center gap-2">
@@ -244,7 +244,7 @@ export default function QuestionPanel({
       </div>
       
       {/* 底部导航 */}
-      <div className="p-4 border-t bg-gray-50">
+      <div className="p-4 border-t bg-gray-50 flex-shrink-0">
         <div className="flex items-center justify-between">
           <Button
             variant="outline"
