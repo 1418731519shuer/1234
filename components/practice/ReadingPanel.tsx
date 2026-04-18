@@ -9,7 +9,9 @@ import {
   Loader2,
   Eye,
   Sun,
-  Moon
+  Moon,
+  BookPlus,
+  X
 } from 'lucide-react'
 
 interface ReadingPanelProps {
@@ -30,6 +32,8 @@ interface ReadingPanelProps {
   translation?: Array<{english: string, chinese: string}>
   onTranslate?: () => void
   isTranslating?: boolean
+  articleId?: string
+  isSubmitted?: boolean
 }
 
 // 4种护眼柔和颜色
@@ -60,6 +64,8 @@ export default function ReadingPanel({
   translation,
   onTranslate,
   isTranslating,
+  articleId,
+  isSubmitted = false,
 }: ReadingPanelProps) {
   const [activeColor, setActiveColor] = useState<string>('red')
   const [hoveredHighlight, setHoveredHighlight] = useState<string | null>(null)
@@ -68,6 +74,13 @@ export default function ReadingPanel({
   const [showTranslation, setShowTranslation] = useState(false)
   const [eyeCareMode, setEyeCareMode] = useState(true)
   const contentRef = useRef<HTMLDivElement>(null)
+  
+  // 生词功能状态
+  const [selectedWord, setSelectedWord] = useState<string | null>(null)
+  const [wordMeaning, setWordMeaning] = useState<string>('')
+  const [isLoadingMeaning, setIsLoadingMeaning] = useState(false)
+  const [popupPosition, setPopupPosition] = useState({ x: 0, y: 0 })
+  const [addedWords, setAddedWords] = useState<Set<string>>(new Set())
 
   // 键盘快捷键
   useEffect(() => {
@@ -118,6 +131,58 @@ export default function ReadingPanel({
       onTextSelect?.(text)
     }
   }, [isMarkingMode, activeColor, currentQuestion, highlights, onHighlight, onUpdateHighlight, onTextSelect])
+  
+  // 处理单词点击（提交后可用）
+  const handleWordClick = useCallback(async (word: string, e: React.MouseEvent) => {
+    if (!isSubmitted) return
+    
+    // 清理单词（去除标点）
+    const cleanWord = word.replace(/[.,!?;:'"()]/g, '').toLowerCase()
+    if (!cleanWord || cleanWord.length < 2) return
+    
+    // 设置弹窗位置
+    const rect = (e.target as HTMLElement).getBoundingClientRect()
+    setPopupPosition({ x: rect.left, y: rect.bottom + 5 })
+    setSelectedWord(cleanWord)
+    setWordMeaning('')
+    setIsLoadingMeaning(true)
+    
+    // 获取单词释义
+    try {
+      const response = await fetch('/api/vocabulary/lookup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ word: cleanWord }),
+      })
+      const data = await response.json()
+      setWordMeaning(data.meaning || '未找到释义')
+    } catch (error) {
+      setWordMeaning('获取释义失败')
+    } finally {
+      setIsLoadingMeaning(false)
+    }
+  }, [isSubmitted])
+  
+  // 添加到生词本
+  const addToVocabulary = async () => {
+    if (!selectedWord || !wordMeaning) return
+    
+    try {
+      await fetch('/api/vocabulary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          word: selectedWord,
+          meaning: wordMeaning,
+          articleId,
+        }),
+      })
+      setAddedWords(prev => new Set(prev).add(selectedWord))
+      setSelectedWord(null)
+    } catch (error) {
+      console.error('添加生词失败:', error)
+    }
+  }
 
   const getColorClass = (colorId: string) => {
     return COLORS.find(c => c.id === colorId) || COLORS[0]
@@ -303,13 +368,54 @@ export default function ReadingPanel({
       </div>
       
       {/* 文章内容 */}
-      <div className={`flex-1 min-h-0 overflow-y-auto p-6 ${eyeCareMode ? 'bg-[#f7f3e3]' : 'bg-white'}`}>
+      <div className={`flex-1 min-h-0 overflow-y-auto p-6 relative ${eyeCareMode ? 'bg-[#f7f3e3]' : 'bg-white'}`}>
         <div
           className={`prose prose-sm max-w-none select-text ${isMarkingMode ? 'cursor-crosshair' : 'cursor-text'} ${eyeCareMode ? 'text-[#3d3d3d]' : 'text-gray-800'}`}
           onMouseUp={handleMouseUp}
+          onDoubleClick={(e) => {
+            const selection = window.getSelection()
+            const word = selection?.toString().trim()
+            if (word && isSubmitted) {
+              handleWordClick(word, e)
+            }
+          }}
         >
           {showTranslation && translation.length > 0 ? renderTranslation() : renderContent()}
         </div>
+        
+        {/* 生词弹窗 */}
+        {selectedWord && isSubmitted && (
+          <div 
+            className="absolute z-50 bg-white rounded-lg shadow-xl border border-gray-200 p-4 w-64"
+            style={{ left: popupPosition.x, top: popupPosition.y }}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className="font-bold text-gray-900">{selectedWord}</span>
+              <button onClick={() => setSelectedWord(null)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            {isLoadingMeaning ? (
+              <div className="flex items-center gap-2 text-gray-500">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>查询中...</span>
+              </div>
+            ) : (
+              <>
+                <p className="text-sm text-gray-700 mb-3 whitespace-pre-wrap">{wordMeaning}</p>
+                <Button 
+                  size="sm" 
+                  onClick={addToVocabulary}
+                  disabled={addedWords.has(selectedWord)}
+                  className="w-full"
+                >
+                  <BookPlus className="w-4 h-4 mr-1" />
+                  {addedWords.has(selectedWord) ? '已加入生词本' : '加入生词本'}
+                </Button>
+              </>
+            )}
+          </div>
+        )}
       </div>
       
       {/* 底部工具栏 */}

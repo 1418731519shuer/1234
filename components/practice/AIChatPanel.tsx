@@ -98,6 +98,13 @@ export default function AIChatPanel({
     }
   }, [isSubmitted, currentQuestionIndex])
   
+  // 当题目解析选中变化时，自动同步到AI助教
+  useEffect(() => {
+    if (isSubmitted && currentQuestionIndex !== selectedQuestion) {
+      setSelectedQuestion(currentQuestionIndex)
+    }
+  }, [currentQuestionIndex, isSubmitted])
+  
   // 处理从题目解析传入的问题
   useEffect(() => {
     if (initialQuestion) {

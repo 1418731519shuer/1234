@@ -262,9 +262,9 @@ export default function PracticePage({ params }: { params: Promise<{ id: string 
         </div>
         
         {/* 主内容区 - 三栏布局 */}
-        <div className="flex h-[calc(100vh-57px)] overflow-hidden">
+        <div className="flex h-[calc(100vh-57px)]">
           {/* 左侧文章 - 50% */}
-          <div className="w-1/2 border-r border-slate-200 bg-white flex flex-col min-h-0 overflow-hidden">
+          <div className="w-1/2 border-r border-slate-200 bg-white h-full overflow-hidden flex flex-col">
             <ReadingPanel
               content={article.content}
               title={article.title}
@@ -276,15 +276,17 @@ export default function PracticePage({ params }: { params: Promise<{ id: string 
               translation={translation}
               onTranslate={handleTranslate}
               isTranslating={isTranslating}
+              articleId={article.id}
+              isSubmitted={isSubmitted}
             />
           </div>
           
           {/* 中间题目解析 - 25% */}
-          <div className="w-1/4 border-r border-slate-200 bg-slate-50 flex flex-col min-h-0 overflow-hidden">
-            <div className="p-3 border-b bg-white">
+          <div className="w-1/4 border-r border-slate-200 bg-slate-50 h-full overflow-hidden flex flex-col">
+            <div className="p-3 border-b bg-white shrink-0">
               <h2 className="font-semibold text-slate-800">题目解析</h2>
             </div>
-            <div className="flex-1 min-h-0 overflow-y-auto p-3">
+            <div className="flex-1 overflow-y-auto p-3">
               <div className="space-y-3">
                 {article.questions.map((q, i) => {
                   const isCorrect = answers[q.id] === q.correctAnswer
@@ -363,7 +365,7 @@ export default function PracticePage({ params }: { params: Promise<{ id: string 
           </div>
           
           {/* 右侧AI问答 - 25% */}
-          <div className="w-1/4 bg-white flex flex-col min-h-0 overflow-hidden">
+          <div className="w-1/4 bg-white h-full overflow-hidden flex flex-col">
             <AIChatPanel
               articleTitle={article.title}
               articleContent={article.content}
