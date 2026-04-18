@@ -58,7 +58,7 @@ export default function PracticePage({ params }: { params: Promise<{ id: string 
   const [practiceId, setPracticeId] = useState<string>('')
   const [showAI, setShowAI] = useState(false)
   const [errorNotes, setErrorNotes] = useState<Record<string, string>>({})
-  const [translation, setTranslation] = useState<string>('')
+  const [translation, setTranslation] = useState<Array<{english: string, chinese: string}>>([])
   const [isTranslating, setIsTranslating] = useState(false)
   
   useEffect(() => {
@@ -69,7 +69,15 @@ export default function PracticePage({ params }: { params: Promise<{ id: string 
         setArticle(data)
         
         if (data.translation) {
-          setTranslation(data.translation)
+          // 尝试解析翻译数据
+          try {
+            const parsed = typeof data.translation === 'string' ? JSON.parse(data.translation) : data.translation
+            if (Array.isArray(parsed)) {
+              setTranslation(parsed)
+            }
+          } catch {
+            // 如果解析失败，忽略
+          }
         }
         
         const practiceRes = await fetch('/api/practice', {
@@ -179,7 +187,7 @@ export default function PracticePage({ params }: { params: Promise<{ id: string 
   }
   
   const handleTranslate = async () => {
-    if (!article || translation) return
+    if (!article || translation.length > 0) return
     
     setIsTranslating(true)
     try {
@@ -192,7 +200,7 @@ export default function PracticePage({ params }: { params: Promise<{ id: string 
         }),
       })
       const data = await response.json()
-      setTranslation(data.translation)
+      setTranslation(data.sentences || [])
     } catch (error) {
       console.error('Translate error:', error)
     } finally {

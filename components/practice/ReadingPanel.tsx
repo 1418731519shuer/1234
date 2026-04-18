@@ -28,7 +28,7 @@ interface ReadingPanelProps {
   onRemoveHighlight?: (text: string) => void
   onUpdateHighlight?: (text: string, color: string) => void
   onTextSelect?: (text: string) => void
-  translation?: string
+  translation?: Array<{english: string, chinese: string}>
   onTranslate?: () => void
   isTranslating?: boolean
 }
@@ -198,20 +198,17 @@ export default function ReadingPanel({
     })
   }
 
-  // 渲染翻译内容（对齐显示）
+  // 渲染翻译内容（逐句对照）
   const renderTranslation = () => {
-    if (!translation) return null
-    
-    const originalParagraphs = content.split('\n\n')
-    const translatedParagraphs = translation.split('\n\n')
+    if (!translation || translation.length === 0) return null
     
     return (
-      <div className="space-y-6">
-        {originalParagraphs.map((para, i) => (
-          <div key={i} className="space-y-2">
-            <p className="text-sm text-gray-500 leading-relaxed">{para}</p>
-            <p className="text-[17px] text-gray-800 leading-loose font-medium">
-              {translatedParagraphs[i] || ''}
+      <div className="space-y-4">
+        {translation.map((sentence, i) => (
+          <div key={i} className="p-3 rounded-lg bg-amber-50/50 border border-amber-100">
+            <p className="text-sm text-gray-600 leading-relaxed mb-2">{sentence.english}</p>
+            <p className="text-[15px] text-gray-800 leading-relaxed">
+              {sentence.chinese}
             </p>
           </div>
         ))}
@@ -242,7 +239,7 @@ export default function ReadingPanel({
               variant={showTranslation ? "default" : "outline"}
               size="sm"
               onClick={() => {
-                if (!translation && onTranslate) {
+                if (translation.length === 0 && onTranslate) {
                   onTranslate()
                 }
                 setShowTranslation(!showTranslation)
@@ -312,7 +309,7 @@ export default function ReadingPanel({
           className={`prose prose-sm max-w-none select-text ${isMarkingMode ? 'cursor-crosshair' : 'cursor-text'}`}
           onMouseUp={handleMouseUp}
         >
-          {showTranslation && translation ? renderTranslation() : renderContent()}
+          {showTranslation && translation.length > 0 ? renderTranslation() : renderContent()}
         </div>
       </ScrollArea>
       
