@@ -1,0 +1,206 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// 文章/题目主表
+model Article {
+  id              String           @id @default(cuid())
+  title           String
+  content         String           // 文章正文（完型填空带空位标记）
+  source          String?          // 来源
+  year            Int?             // 年份
+  examType        String           @default("english1") // english1 或 english2
+  questionType    String           // reading, cloze, sevenFive, translation, writing
+  category        String?          // 话题分类
+  difficulty      Int              @default(3)
+  wordCount       Int?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  translation     String?          // 翻译（JSON格式，逐句对照）
+  practiceRecords PracticeRecord[]
+  questions       Question[]
+  clozeBlanks     ClozeBlank[]     // 完型填空选项
+  sevenFiveOpts   SevenFiveOption[] // 七选五选项
+  writingTask     WritingTask?     // 写作任务
+
+  @@map("articles")
+}
+
+// 题目（阅读理解、翻译等）
+model Question {
+  id            String         @id @default(cuid())
+  articleId     String
+  questionNum   Int
+  stem          String         // 题目
+  questionType  String?        // 主旨题、细节题、推断题等
+  analysis      String?        // 解析
+  correctAnswer String         // 正确答案
+  answerRecords AnswerRecord[]
+  options       Option[]
+  article       Article        @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@unique([articleId, questionNum])
+  @@map("questions")
+}
+
+// 选项（阅读理解ABCD）
+model Option {
+  id         String   @id @default(cuid())
+  questionId String
+  optionKey  String   // A, B, C, D
+  content    String   // 选项内容
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, optionKey])
+  @@map("options")
+}
+
+// 完型填空选项
+model ClozeBlank {
+  id            String   @id @default(cuid())
+  articleId     String
+  blankNum      Int      // 第几空（1-20）
+  correctAnswer String   // 正确答案 A/B/C/D
+  optionA       String   // A选项内容
+  optionB       String   // B选项内容
+  optionC       String   // C选项内容
+  optionD       String   // D选项内容
+  article       Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@unique([articleId, blankNum])
+  @@map("cloze_blanks")
+}
+
+// 七选五选项
+model SevenFiveOption {
+  id        String   @id @default(cuid())
+  articleId String
+  optionKey String   // A, B, C, D, E, F, G
+  content   String   // 段落内容
+  article   Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@unique([articleId, optionKey])
+  @@map("seven_five_options")
+}
+
+// 写作任务
+model WritingTask {
+  id           String  @id @default(cuid())
+  articleId    String  @unique
+  taskType     String  // small (小作文) 或 large (大作文)
+  instructions String  // 写作要求
+  wordCount    Int     // 建议字数
+  sampleAnswer String? // 范文
+  article      Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@map("writing_tasks")
+}
+
+// 练习记录
+model PracticeRecord {
+  id             String         @id @default(cuid())
+  articleId      String
+  startTime      DateTime       @default(now())
+  endTime        DateTime?
+  duration       Int?
+  totalCorrect   Int            @default(0)
+  totalQuestions Int            @default(0)
+  isCompleted    Boolean        @default(false)
+  answerRecords  AnswerRecord[]
+  article        Article        @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@map("practice_records")
+}
+
+// 答题记录
+model AnswerRecord {
+  id          String         @id @default(cuid())
+  practiceId  String
+  questionId  String?
+  blankNum    Int?           // 完型填空用
+  gapNum      Int?           // 七选五用
+  userAnswer  String?
+  isCorrect   Boolean?
+  markedColor String?
+  markedText  String?
+  note        String?
+  answeredAt  DateTime       @default(now())
+  question    Question?      @relation(fields: [questionId], references: [id])
+  practice    PracticeRecord @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+
+  @@map("answer_records")
+}
+
+// AI对话
+model AIChat {
+  id          String   @id @default(cuid())
+  questionId  String?
+  articleId   String?
+  userMessage String
+  aiResponse  String
+  context     String?
+  createdAt   DateTime @default(now())
+
+  @@map("ai_chats")
+}
+
+// 知识库
+model Knowledge {
+  id        String   @id @default(cuid())
+  title     String
+  content   String
+  category  String?
+  tags      String?
+  embedding String?
+  source    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("knowledge")
+}
+
+// 学习进度
+model LearningProgress {
+  id                String   @id @default(cuid())
+  date              DateTime @unique @default(now())
+  articlesRead      Int      @default(0)
+  questionsAnswered Int      @default(0)
+  correctCount      Int      @default(0)
+  totalTime         Int      @default(0)
+
+  @@map("learning_progress")
+}
+
+// 错题本
+model WrongQuestion {
+  id          String   @id @default(cuid())
+  questionId  String   @unique
+  articleId   String
+  userAnswer  String
+  wrongCount  Int      @default(1)
+  lastWrongAt DateTime @default(now())
+  isMastered  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@map("wrong_questions")
+}
+
+// 词汇库
+model Vocabulary {
+  id           String    @id @default(cuid())
+  word         String    @unique
+  meaning      String
+  context      String?
+  articleId    String?
+  category     String    @default("word")
+  mastery      Int       @default(0)
+  reviewCount  Int       @default(0)
+  createdAt    DateTime  @default(now())
+  lastReviewAt DateTime?
+
+  @@map("vocabularies")
+}
