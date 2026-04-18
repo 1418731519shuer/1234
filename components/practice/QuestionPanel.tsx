@@ -158,7 +158,7 @@ export default function QuestionPanel({
       </div>
       
       {/* 当前题目 */}
-      <div className="flex-1 overflow-auto p-4">
+      <div className="flex-1 overflow-y-auto p-4" style={{ minHeight: 0 }}>
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center gap-2">

@@ -282,8 +282,24 @@ export default function Home() {
               articles.map((article, index) => {
                 const status = getArticleStatus(article)
                 
+                // 根据题型跳转到不同的练习页面
+                const getPracticeUrl = () => {
+                  switch (article.questionType) {
+                    case 'sevenFive':
+                      return `/practice/seven-five/${article.id}`
+                    case 'cloze':
+                      return `/practice/cloze/${article.id}`
+                    case 'translation':
+                      return `/practice/translation/${article.id}`
+                    case 'writing':
+                      return `/practice/writing/${article.id}`
+                    default:
+                      return `/practice/${article.id}`
+                  }
+                }
+                
                 return (
-                  <Link key={article.id} href={`/practice/${article.id}`}>
+                  <Link key={article.id} href={getPracticeUrl()}>
                     <div 
                       className="rounded-xl px-5 py-4 flex items-center gap-4 cursor-pointer transition-all hover:shadow-md"
                       style={{ background: 'var(--bg)', border: '1px solid var(--bd)' }}

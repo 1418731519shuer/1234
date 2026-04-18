@@ -427,9 +427,12 @@ export default function PracticePage({ params }: { params: Promise<{ id: string 
       </div>
       
       {/* 主内容区 */}
-      <div className="flex h-[calc(100vh-57px)] overflow-hidden">
+      <div className="flex h-[calc(100vh-57px)]">
         {/* 左侧文章 */}
-        <div className={`${showAI ? 'w-[35%]' : 'w-1/2'} min-w-0 border-r border-slate-200 transition-all duration-300 overflow-hidden`}>
+        <div 
+          className={`${showAI ? 'w-[35%]' : 'w-1/2'} min-w-0 border-r border-slate-200 transition-all duration-300`}
+          style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}
+        >
           <ReadingPanel
             content={article.content}
             title={article.title}
@@ -445,7 +448,10 @@ export default function PracticePage({ params }: { params: Promise<{ id: string 
         </div>
         
         {/* 右侧题目 */}
-        <div className={`${showAI ? 'w-[35%]' : 'w-1/2'} min-w-0 border-r border-slate-200 transition-all duration-300 overflow-hidden`}>
+        <div 
+          className={`${showAI ? 'w-[35%]' : 'w-1/2'} min-w-0 border-r border-slate-200 transition-all duration-300`}
+          style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}
+        >
           <QuestionPanel
             questions={article.questions}
             currentIndex={currentIndex}
@@ -460,7 +466,10 @@ export default function PracticePage({ params }: { params: Promise<{ id: string 
         
         {/* AI面板 */}
         {showAI && (
-          <div className="w-[30%] min-w-0 border-l border-slate-200 overflow-hidden animate-in slide-in-from-right">
+          <div 
+            className="w-[30%] min-w-0 border-l border-slate-200 animate-in slide-in-from-right"
+            style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}
+          >
             <AIChatPanel
               articleTitle={article.title}
               articleContent={article.content}

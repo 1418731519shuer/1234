@@ -332,23 +332,50 @@ export default function ReadingPanel({
   }
 
   return (
-    <div className={`h-full flex flex-col transition-colors duration-300 ${
-      eyeCareMode 
-        ? 'bg-[#C7EDCC]' 
-        : 'bg-white'
-    }`}>
+    <div 
+      className="h-full flex flex-col transition-all duration-300"
+      style={{ 
+        background: eyeCareMode 
+          ? 'linear-gradient(135deg, #E8F5E9 0%, #F1F8E9 50%, #FFF8E1 100%)'
+          : '#ffffff',
+        filter: eyeCareMode ? 'sepia(0.1) saturate(1.1)' : 'none'
+      }}
+    >
       {/* 文章标题 */}
-      <div className={`p-4 border-b ${eyeCareMode ? 'bg-[#B8E0BD]' : 'bg-white'}`}>
+      <div 
+        className="p-4 border-b"
+        style={{ 
+          background: eyeCareMode 
+            ? 'linear-gradient(135deg, #C8E6C9 0%, #DCEDC8 100%)'
+            : '#ffffff',
+          borderColor: eyeCareMode ? '#A5D6A7' : '#e5e7eb'
+        }}
+      >
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-xl font-bold text-gray-900">{title}</h2>
+          <h2 
+            className="text-xl font-bold"
+            style={{ color: eyeCareMode ? '#2E7D32' : '#111827' }}
+          >
+            {title}
+          </h2>
           <div className="flex items-center gap-2">
             <Button
               variant="ghost"
               size="sm"
               onClick={() => setEyeCareMode(!eyeCareMode)}
               title={eyeCareMode ? '关闭护眼模式' : '开启护眼模式'}
+              style={{ 
+                background: eyeCareMode ? 'rgba(255,255,255,0.5)' : 'transparent'
+              }}
             >
-              {eyeCareMode ? <Sun className="w-4 h-4 text-amber-500" /> : <Moon className="w-4 h-4" />}
+              {eyeCareMode ? (
+                <div className="flex items-center gap-1">
+                  <span className="text-xs">护眼</span>
+                  <Sun className="w-4 h-4 text-amber-600" />
+                </div>
+              ) : (
+                <Moon className="w-4 h-4 text-gray-500" />
+              )}
             </Button>
             <Button
               variant={showTranslation ? "default" : "outline"}
@@ -360,6 +387,10 @@ export default function ReadingPanel({
                 setShowTranslation(!showTranslation)
               }}
               disabled={isTranslating}
+              style={eyeCareMode ? { 
+                borderColor: '#81C784',
+                background: showTranslation ? '#66BB6A' : 'rgba(255,255,255,0.7)'
+              } : {}}
             >
               {isTranslating ? (
                 <Loader2 className="w-4 h-4 mr-1 animate-spin" />
@@ -373,7 +404,12 @@ export default function ReadingPanel({
         
         {/* 颜色选择器 */}
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-sm text-gray-500">标记笔:</span>
+          <span 
+            className="text-sm"
+            style={{ color: eyeCareMode ? '#558B2F' : '#6b7280' }}
+          >
+            标记笔:
+          </span>
           {COLORS.map((color, index) => (
             <button
               key={color.id}
@@ -382,7 +418,9 @@ export default function ReadingPanel({
                 flex items-center gap-1.5 px-3 py-1.5 rounded-full border-2 transition-all duration-200
                 ${activeColor === color.id 
                   ? `${color.bg} ${color.border} shadow-sm scale-105` 
-                  : 'bg-white/50 border-gray-200 hover:bg-gray-50'
+                  : eyeCareMode 
+                    ? 'bg-white/60 border-green-200 hover:bg-white/80'
+                    : 'bg-white/50 border-gray-200 hover:bg-gray-50'
                 }
               `}
               title={`快捷键: ${index + 1}`}
@@ -397,6 +435,12 @@ export default function ReadingPanel({
               variant={isMarkingMode ? "default" : "outline"}
               size="sm"
               onClick={() => setIsMarkingMode(!isMarkingMode)}
+              style={eyeCareMode && !isMarkingMode ? { 
+                borderColor: '#81C784',
+                background: 'rgba(255,255,255,0.7)'
+              } : eyeCareMode && isMarkingMode ? {
+                background: '#66BB6A'
+              } : {}}
             >
               <Highlighter className="w-4 h-4 mr-1" />
               {isMarkingMode ? '标记中' : '仅阅读'}
@@ -406,26 +450,45 @@ export default function ReadingPanel({
         
         {/* 当前题目提示 */}
         <div className="mt-3 flex items-center gap-2">
-          <Badge variant="outline" className="text-xs">
+          <Badge 
+            variant="outline" 
+            className="text-xs"
+            style={eyeCareMode ? { borderColor: '#81C784', color: '#388E3C' } : {}}
+          >
             当前: Q{currentQuestion}
           </Badge>
-          <Badge className={`${getColorClass(activeColor).bg} ${getColorClass(activeColor).text} text-xs border ${getColorClass(activeColor).border}`}>
+          <Badge 
+            className={`${getColorClass(activeColor).bg} ${getColorClass(activeColor).text} text-xs border ${getColorClass(activeColor).border}`}
+          >
             {getColorClass(activeColor).name}笔
           </Badge>
           {isMarkingMode && (
-            <span className="text-xs text-gray-400">滑过文本自动标记</span>
+            <span 
+              className="text-xs"
+              style={{ color: eyeCareMode ? '#689F38' : '#9ca3af' }}
+            >
+              滑过文本自动标记
+            </span>
           )}
         </div>
       </div>
       
       {/* 文章内容 */}
       <div 
-        className={`relative p-6 ${eyeCareMode ? 'bg-[#C7EDCC]' : 'bg-white'}`}
-        style={{ flex: '1 1 0%', minHeight: 0, overflowY: 'auto' }}
+        className="relative p-6"
+        style={{ 
+          flex: '1 1 0%', 
+          minHeight: 0, 
+          overflowY: 'auto',
+          background: eyeCareMode 
+            ? 'linear-gradient(180deg, #F1F8E9 0%, #FFFDE7 100%)'
+            : '#ffffff'
+        }}
         ref={contentRef}
       >
         <div
-          className={`prose prose-sm max-w-none select-text ${isMarkingMode ? 'cursor-crosshair' : 'cursor-text'} ${eyeCareMode ? 'text-[#2d4a2e]' : 'text-gray-800'}`}
+          className={`prose prose-sm max-w-none select-text ${isMarkingMode ? 'cursor-crosshair' : 'cursor-text'}`}
+          style={{ color: eyeCareMode ? '#33691E' : '#374151' }}
           onMouseUp={handleMouseUp}
           onDoubleClick={(e) => {
             const selection = window.getSelection()
@@ -492,14 +555,25 @@ export default function ReadingPanel({
       </div>
       
       {/* 底部工具栏 */}
-      <div className={`p-3 border-t ${eyeCareMode ? 'bg-[#B8E0BD]' : 'bg-gray-50'}`}>
+      <div 
+        className="p-3 border-t"
+        style={{ 
+          background: eyeCareMode 
+            ? 'linear-gradient(135deg, #C8E6C9 0%, #DCEDC8 100%)'
+            : '#f9fafb',
+          borderColor: eyeCareMode ? '#A5D6A7' : '#e5e7eb'
+        }}
+      >
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4 text-sm text-gray-500">
+          <div 
+            className="flex items-center gap-4 text-sm"
+            style={{ color: eyeCareMode ? '#558B2F' : '#6b7280' }}
+          >
             <span className="flex items-center gap-1">
               <Highlighter className="w-4 h-4" />
               {isMarkingMode ? '滑过文本标记' : '仅阅读模式'}
             </span>
-            <span className="text-gray-300">|</span>
+            <span style={{ color: eyeCareMode ? '#81C784' : '#d1d5db' }}>|</span>
             <span>快捷键: 1-4 切换颜色 | Backspace 删除</span>
           </div>
           <div className="flex items-center gap-2">
@@ -508,7 +582,12 @@ export default function ReadingPanel({
               return (
                 <div key={color.id} className="flex items-center gap-1">
                   <div className={`w-3 h-3 rounded-full ${color.mark} border ${color.border}`} />
-                  <span className="text-xs text-gray-500">{count}</span>
+                  <span 
+                    className="text-xs"
+                    style={{ color: eyeCareMode ? '#689F38' : '#6b7280' }}
+                  >
+                    {count}
+                  </span>
                 </div>
               )
             })}
