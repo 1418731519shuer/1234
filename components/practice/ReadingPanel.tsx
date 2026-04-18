@@ -219,11 +219,11 @@ export default function ReadingPanel({
   return (
     <div className={`h-full flex flex-col transition-colors duration-300 ${
       eyeCareMode 
-        ? 'bg-[#faf8f0]' 
+        ? 'bg-[#f7f3e3]' 
         : 'bg-white'
     }`}>
       {/* 文章标题 */}
-      <div className={`p-4 border-b ${eyeCareMode ? 'bg-[#f5f2e8]' : 'bg-white'}`}>
+      <div className={`p-4 border-b ${eyeCareMode ? 'bg-[#f0ebe0]' : 'bg-white'}`}>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-xl font-bold text-gray-900">{title}</h2>
           <div className="flex items-center gap-2">
@@ -304,9 +304,9 @@ export default function ReadingPanel({
       </div>
       
       {/* 文章内容 */}
-      <ScrollArea className="flex-1 p-6" ref={contentRef}>
+      <ScrollArea className={`flex-1 p-6 ${eyeCareMode ? 'bg-[#f7f3e3]' : 'bg-white'}`}>
         <div
-          className={`prose prose-sm max-w-none select-text ${isMarkingMode ? 'cursor-crosshair' : 'cursor-text'}`}
+          className={`prose prose-sm max-w-none select-text ${isMarkingMode ? 'cursor-crosshair' : 'cursor-text'} ${eyeCareMode ? 'text-[#3d3d3d]' : 'text-gray-800'}`}
           onMouseUp={handleMouseUp}
         >
           {showTranslation && translation.length > 0 ? renderTranslation() : renderContent()}
@@ -314,7 +314,7 @@ export default function ReadingPanel({
       </ScrollArea>
       
       {/* 底部工具栏 */}
-      <div className={`p-3 border-t ${eyeCareMode ? 'bg-[#f5f2e8]' : 'bg-gray-50'}`}>
+      <div className={`p-3 border-t ${eyeCareMode ? 'bg-[#f0ebe0]' : 'bg-gray-50'}`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4 text-sm text-gray-500">
             <span className="flex items-center gap-1">
