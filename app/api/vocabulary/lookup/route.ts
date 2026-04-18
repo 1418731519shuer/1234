@@ -168,65 +168,33 @@ export async function GET(request: NextRequest) {
     const cachedWords = new Set(cached.map(c => c.word))
     
     // 找出未缓存的词（限制数量，避免一次性请求太多）
-    const uncachedWords = uniqueWords.filter(w => !cachedWords.has(w)).slice(0, 50)
+    const uncachedWords = uniqueWords.filter(w => !cachedWords.has(w)).slice(0, 20)
     
-    // 批量查询未缓存的词
+    // 逐个查询未缓存的词
     const results: Record<string, string> = {}
     
-    // 腾讯API支持批量翻译，用逗号分隔
-    if (uncachedWords.length > 0) {
-      const batchText = uncachedWords.join('\n')
-      const endpoint = 'tmt.tencentcloudapi.com'
-      const action = 'TextTranslateBatch'
-      const version = '2018-03-21'
-      const timestamp = Math.floor(Date.now() / 1000).toString()
-      const nonce = Math.random().toString(36).substring(2)
-      
-      const params: Record<string, string> = {
-        Action: action,
-        Version: version,
-        Region: 'ap-beijing',
-        Timestamp: timestamp,
-        Nonce: nonce,
-        SecretId: TENCENT_SECRET_ID,
-        Source: 'en',
-        Target: 'zh',
-        SourceTextList: JSON.stringify(uncachedWords),
-        ProjectId: '0',
-      }
-      
-      const signature = generateSignature(params, TENCENT_SECRET_KEY)
-      const url = `https://${endpoint}?${Object.entries(params).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&')}&Signature=${encodeURIComponent(signature)}`
-      
+    for (const word of uncachedWords) {
       try {
-        const response = await fetch(url)
-        const data = await response.json()
-        
-        if (data.Response && data.Response.TargetTextList) {
-          // 保存到数据库
-          for (let i = 0; i < uncachedWords.length; i++) {
-            const word = uncachedWords[i]
-            const meaning = data.Response.TargetTextList[i] || ''
-            
-            if (meaning) {
-              try {
-                await prisma.vocabulary.create({
-                  data: {
-                    word,
-                    meaning,
-                    articleId: articleId || undefined,
-                    category: 'word',
-                  },
-                })
-              } catch {
-                // 可能已存在，忽略
-              }
-              results[word] = meaning
-            }
+        const meaning = await translateWithTencent(word)
+        if (meaning && meaning !== '未找到释义' && meaning !== '查询失败') {
+          try {
+            await prisma.vocabulary.create({
+              data: {
+                word,
+                meaning,
+                articleId: articleId || undefined,
+                category: 'word',
+              },
+            })
+          } catch {
+            // 可能已存在，忽略
           }
+          results[word] = meaning
         }
+        // 添加延迟避免请求过快
+        await new Promise(resolve => setTimeout(resolve, 100))
       } catch (error) {
-        console.error('Batch translate error:', error)
+        console.error(`Translate ${word} error:`, error)
       }
     }
     
