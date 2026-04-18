@@ -261,9 +261,9 @@ export default function PracticePage({ params }: { params: Promise<{ id: string 
         </div>
         
         {/* 主内容区 - 三栏布局 */}
-        <div className="flex h-[calc(100vh-57px)]">
+        <div className="flex h-[calc(100vh-57px)] overflow-hidden">
           {/* 左侧文章 */}
-          <div className="w-1/3 border-r border-slate-200 bg-white">
+          <div className="w-[35%] min-w-0 border-r border-slate-200 bg-white overflow-hidden">
             <ReadingPanel
               content={article.content}
               title={article.title}
@@ -279,7 +279,7 @@ export default function PracticePage({ params }: { params: Promise<{ id: string 
           </div>
           
           {/* 中间题目解析 */}
-          <div className="w-1/3 border-r border-slate-200 bg-slate-50 overflow-auto">
+          <div className="w-[30%] min-w-0 border-r border-slate-200 bg-slate-50 overflow-y-auto">
             <div className="p-4">
               <h2 className="font-semibold text-slate-800 mb-4">题目解析</h2>
               <div className="space-y-3">
@@ -345,7 +345,7 @@ export default function PracticePage({ params }: { params: Promise<{ id: string 
           </div>
           
           {/* 右侧AI问答 */}
-          <div className="w-1/3 bg-white">
+          <div className="w-[35%] min-w-0 bg-white overflow-hidden">
             <AIChatPanel
               articleTitle={article.title}
               articleContent={article.content}
@@ -406,9 +406,9 @@ export default function PracticePage({ params }: { params: Promise<{ id: string 
       </div>
       
       {/* 主内容区 */}
-      <div className="flex h-[calc(100vh-57px)]">
+      <div className="flex h-[calc(100vh-57px)] overflow-hidden">
         {/* 左侧文章 */}
-        <div className={`${showAI ? 'w-[35%]' : 'w-1/2'} border-r border-slate-200 transition-all duration-300`}>
+        <div className={`${showAI ? 'w-[35%]' : 'w-1/2'} min-w-0 border-r border-slate-200 transition-all duration-300 overflow-hidden`}>
           <ReadingPanel
             content={article.content}
             title={article.title}
@@ -424,7 +424,7 @@ export default function PracticePage({ params }: { params: Promise<{ id: string 
         </div>
         
         {/* 右侧题目 */}
-        <div className={`${showAI ? 'w-[35%]' : 'w-1/2'} border-r border-slate-200 transition-all duration-300`}>
+        <div className={`${showAI ? 'w-[35%]' : 'w-1/2'} min-w-0 border-r border-slate-200 transition-all duration-300 overflow-hidden`}>
           <QuestionPanel
             questions={article.questions}
             currentIndex={currentIndex}
@@ -439,7 +439,7 @@ export default function PracticePage({ params }: { params: Promise<{ id: string 
         
         {/* AI面板 */}
         {showAI && (
-          <div className="w-[30%] border-l border-slate-200 animate-in slide-in-from-right">
+          <div className="w-[30%] min-w-0 border-l border-slate-200 overflow-hidden animate-in slide-in-from-right">
             <AIChatPanel
               articleTitle={article.title}
               articleContent={article.content}
