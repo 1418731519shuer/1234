@@ -78,12 +78,14 @@ export default function ReadingPanel({
   // 生词功能状态
   const [selectedWord, setSelectedWord] = useState<string | null>(null)
   const [wordMeaning, setWordMeaning] = useState<string>('')
+  const [wordPhonetic, setWordPhonetic] = useState<string>('')
+  const [wordPos, setWordPos] = useState<string>('')
   const [isLoadingMeaning, setIsLoadingMeaning] = useState(false)
   const [popupPosition, setPopupPosition] = useState({ x: 0, y: 0 })
   const [addedWords, setAddedWords] = useState<Set<string>>(new Set())
   
   // 生词缓存（预加载后存储）
-  const [wordCache, setWordCache] = useState<Record<string, string>>({})
+  const [wordCache, setWordCache] = useState<Record<string, { meaning: string; phonetic?: string; pos?: string }>>({})
   const [isPreloading, setIsPreloading] = useState(false)
 
   // 键盘快捷键
@@ -115,13 +117,18 @@ export default function ReadingPanel({
   useEffect(() => {
     if (isSubmitted && articleId && content) {
       setIsPreloading(true)
-      fetch(`/api/vocabulary/lookup?articleId=${articleId}&content=${encodeURIComponent(content.slice(0, 5000))}`)
+      fetch(`/api/dictionary/lookup?articleId=${articleId}&content=${encodeURIComponent(content.slice(0, 5000))}`)
         .then(res => res.json())
         .then(data => {
           if (data.words) {
-            const cache: Record<string, string> = {}
+            const cache: Record<string, { meaning: string; phonetic?: string; pos?: string }> = {}
             for (const [word, info] of Object.entries(data.words)) {
-              cache[word] = (info as { meaning: string }).meaning
+              const item = info as { meaning: string; phonetic?: string; pos?: string }
+              cache[word] = {
+                meaning: item.meaning,
+                phonetic: item.phonetic,
+                pos: item.pos,
+              }
             }
             setWordCache(cache)
           }
@@ -171,26 +178,39 @@ export default function ReadingPanel({
     
     // 优先从缓存读取
     if (wordCache[cleanWord]) {
-      setWordMeaning(wordCache[cleanWord])
+      setWordMeaning(wordCache[cleanWord].meaning)
+      setWordPhonetic(wordCache[cleanWord].phonetic || '')
+      setWordPos(wordCache[cleanWord].pos || '')
       setIsLoadingMeaning(false)
       return
     }
     
-    // 缓存没有，调用API
+    // 缓存没有，调用本地词典API
     setWordMeaning('')
+    setWordPhonetic('')
+    setWordPos('')
     setIsLoadingMeaning(true)
     
     try {
-      const response = await fetch('/api/vocabulary/lookup', {
+      const response = await fetch('/api/dictionary/lookup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ word: cleanWord, articleId }),
       })
       const data = await response.json()
       setWordMeaning(data.meaning || '未找到释义')
+      setWordPhonetic(data.phonetic || '')
+      setWordPos(data.pos || '')
       // 更新缓存
       if (data.meaning) {
-        setWordCache(prev => ({ ...prev, [cleanWord]: data.meaning }))
+        setWordCache(prev => ({ 
+          ...prev, 
+          [cleanWord]: { 
+            meaning: data.meaning, 
+            phonetic: data.phonetic, 
+            pos: data.pos 
+          } 
+        }))
       }
     } catch (error) {
       setWordMeaning('获取释义失败')
@@ -420,15 +440,25 @@ export default function ReadingPanel({
         {/* 生词弹窗 */}
         {selectedWord && isSubmitted && (
           <div 
-            className="absolute z-50 bg-white rounded-lg shadow-xl border border-gray-200 p-4 w-64"
+            className="absolute z-50 bg-white rounded-lg shadow-xl border border-gray-200 p-4 w-72"
             style={{ left: popupPosition.x, top: popupPosition.y }}
           >
             <div className="flex items-center justify-between mb-2">
-              <span className="font-bold text-gray-900">{selectedWord}</span>
+              <div>
+                <span className="font-bold text-lg text-gray-900">{selectedWord}</span>
+                {wordPhonetic && (
+                  <span className="ml-2 text-sm text-gray-500">/{wordPhonetic}/</span>
+                )}
+              </div>
               <button onClick={() => setSelectedWord(null)} className="text-gray-400 hover:text-gray-600">
                 <X className="w-4 h-4" />
               </button>
             </div>
+            {wordPos && (
+              <div className="mb-2">
+                <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">{wordPos}</span>
+              </div>
+            )}
             {isLoadingMeaning ? (
               <div className="flex items-center gap-2 text-gray-500">
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -436,7 +466,7 @@ export default function ReadingPanel({
               </div>
             ) : (
               <>
-                <p className="text-sm text-gray-700 mb-3 whitespace-pre-wrap">{wordMeaning}</p>
+                <p className="text-sm text-gray-700 mb-3 whitespace-pre-wrap leading-relaxed">{wordMeaning}</p>
                 <Button 
                   size="sm" 
                   onClick={addToVocabulary}
