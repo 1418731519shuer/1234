@@ -334,11 +334,11 @@ export default function ReadingPanel({
   return (
     <div className={`h-full flex flex-col transition-colors duration-300 ${
       eyeCareMode 
-        ? 'bg-[#f7f3e3]' 
+        ? 'bg-[#C7EDCC]' 
         : 'bg-white'
     }`}>
       {/* 文章标题 */}
-      <div className={`p-4 border-b ${eyeCareMode ? 'bg-[#f0ebe0]' : 'bg-white'}`}>
+      <div className={`p-4 border-b ${eyeCareMode ? 'bg-[#B8E0BD]' : 'bg-white'}`}>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-xl font-bold text-gray-900">{title}</h2>
           <div className="flex items-center gap-2">
@@ -420,11 +420,12 @@ export default function ReadingPanel({
       
       {/* 文章内容 */}
       <div 
-        className={`relative p-6 ${eyeCareMode ? 'bg-[#f7f3e3]' : 'bg-white'}`}
+        className={`relative p-6 ${eyeCareMode ? 'bg-[#C7EDCC]' : 'bg-white'}`}
         style={{ flex: '1 1 0%', minHeight: 0, overflowY: 'auto' }}
+        ref={contentRef}
       >
         <div
-          className={`prose prose-sm max-w-none select-text ${isMarkingMode ? 'cursor-crosshair' : 'cursor-text'} ${eyeCareMode ? 'text-[#3d3d3d]' : 'text-gray-800'}`}
+          className={`prose prose-sm max-w-none select-text ${isMarkingMode ? 'cursor-crosshair' : 'cursor-text'} ${eyeCareMode ? 'text-[#2d4a2e]' : 'text-gray-800'}`}
           onMouseUp={handleMouseUp}
           onDoubleClick={(e) => {
             const selection = window.getSelection()
@@ -440,8 +441,11 @@ export default function ReadingPanel({
         {/* 生词弹窗 */}
         {selectedWord && isSubmitted && (
           <div 
-            className="absolute z-50 bg-white rounded-lg shadow-xl border border-gray-200 p-4 w-72"
-            style={{ left: popupPosition.x, top: popupPosition.y }}
+            className="fixed z-50 bg-white rounded-lg shadow-xl border border-gray-200 p-4 w-72 max-h-80"
+            style={{ 
+              left: Math.min(popupPosition.x, window.innerWidth - 300),
+              top: Math.min(popupPosition.y, window.innerHeight - 350)
+            }}
           >
             <div className="flex items-center justify-between mb-2">
               <div>
@@ -466,7 +470,11 @@ export default function ReadingPanel({
               </div>
             ) : (
               <>
-                <p className="text-sm text-gray-700 mb-3 whitespace-pre-wrap leading-relaxed">{wordMeaning}</p>
+                <div className="text-sm text-gray-700 mb-3 leading-relaxed max-h-40 overflow-y-auto">
+                  {wordMeaning.split('\\n').map((line, i) => (
+                    <div key={i} className="mb-1">{line}</div>
+                  ))}
+                </div>
                 <Button 
                   size="sm" 
                   onClick={addToVocabulary}
@@ -484,7 +492,7 @@ export default function ReadingPanel({
       </div>
       
       {/* 底部工具栏 */}
-      <div className={`p-3 border-t ${eyeCareMode ? 'bg-[#f0ebe0]' : 'bg-gray-50'}`}>
+      <div className={`p-3 border-t ${eyeCareMode ? 'bg-[#B8E0BD]' : 'bg-gray-50'}`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4 text-sm text-gray-500">
             <span className="flex items-center gap-1">
