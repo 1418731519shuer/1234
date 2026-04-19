@@ -1,10 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
-import { Sun, Moon, RotateCcw, Sparkles, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react'
+import { 
+  Sun, Moon, RotateCcw, Sparkles, CheckCircle2, AlertCircle, Loader2,
+  AlignLeft, AlignRight, AlignCenter, Indent, Outdent, Eye, Edit3, FileText
+} from 'lucide-react'
 
 interface WritingTask {
   id: string
@@ -19,14 +22,104 @@ interface WritingTask {
 }
 
 interface WritingScore {
-  content: number       // 内容分 0-10
-  language: number      // 语言分 0-10
-  structure: number     // 结构分 0-10
-  total: number         // 总分 0-30（小作文）或 0-20（大作文实际是15分）
+  content: number
+  language: number
+  structure: number
+  total: number
   feedback: string
   suggestions: string[]
   grammarErrors: { text: string; correction: string; explanation: string }[]
 }
+
+// 书信模板
+const LETTER_TEMPLATES = [
+  {
+    name: '建议信',
+    template: `Dear Sir/Madam,
+
+I am writing to offer some suggestions regarding [主题].
+
+First and foremost, it would be advisable to [建议1]. This is because [原因1].
+
+Additionally, I suggest that [建议2]. By doing so, [好处2].
+
+I hope these suggestions will be taken into consideration. Thank you for your time and attention.
+
+Yours sincerely,
+Li Ming`
+  },
+  {
+    name: '投诉信',
+    template: `Dear Sir/Madam,
+
+I am writing to express my dissatisfaction with [投诉对象/事件].
+
+The problem is that [具体问题]. This has caused [造成的影响].
+
+I would appreciate it if you could [期望的解决方案]. I look forward to your prompt reply.
+
+Yours sincerely,
+Li Ming`
+  },
+  {
+    name: '邀请信',
+    template: `Dear [姓名],
+
+I am writing to invite you to [活动名称], which will be held on [日期] at [地点].
+
+The event will start at [时间] and last for approximately [时长]. During the event, [活动内容].
+
+I would be honored if you could attend. Please let me know your availability by [回复截止日期].
+
+Looking forward to your reply.
+
+Yours sincerely,
+Li Ming`
+  },
+  {
+    name: '感谢信',
+    template: `Dear [姓名],
+
+I am writing to express my sincere gratitude for [感谢的原因].
+
+Your [帮助/支持] was invaluable to me. Thanks to your assistance, I was able to [达成的结果].
+
+I truly appreciate your kindness and support. I hope to have the opportunity to repay your kindness in the future.
+
+Yours sincerely,
+Li Ming`
+  },
+  {
+    name: '道歉信',
+    template: `Dear [姓名],
+
+I am writing to apologize for [道歉的原因].
+
+I understand that this has caused [造成的影响]. I take full responsibility for my actions.
+
+To make up for this, I will [补救措施]. I promise that this will not happen again.
+
+Please accept my sincere apologies.
+
+Yours sincerely,
+Li Ming`
+  },
+  {
+    name: '申请信',
+    template: `Dear Sir/Madam,
+
+I am writing to apply for [申请职位/项目].
+
+I believe I am qualified for this position because [资格理由1]. Additionally, I have [资格理由2].
+
+I am confident that I can [能做出的贡献]. I would welcome the opportunity to discuss my application with you.
+
+Thank you for considering my application. I look forward to hearing from you.
+
+Yours sincerely,
+Li Ming`
+  }
+]
 
 interface WritingPanelProps {
   task: WritingTask
@@ -49,12 +142,146 @@ export default function WritingPanel({
 }: WritingPanelProps) {
   const [eyeCareMode, setEyeCareMode] = useState(true)
   const [showSample, setShowSample] = useState(false)
+  const [showPreview, setShowPreview] = useState(false)
+  const [showTemplates, setShowTemplates] = useState(false)
   
   const wordCount = userAnswer.trim().split(/\s+/).filter(w => w).length
   const isWordCountValid = wordCount >= task.wordCount.min && wordCount <= task.wordCount.max
   
   // 小作文满分10分，大作文满分20分
   const maxScore = task.taskType === 'small' ? 10 : 20
+  
+  // 格式化预览内容
+  const previewContent = useMemo(() => {
+    if (!userAnswer) return []
+    
+    return userAnswer.split('\n').map((line, index) => {
+      // 检测格式标记
+      let formattedLine = line
+      let align: 'left' | 'right' | 'center' = 'left'
+      let indent = 0
+      
+      // 右对齐标记：>> 开头
+      if (line.startsWith('>>')) {
+        formattedLine = line.slice(2).trim()
+        align = 'right'
+      }
+      // 居中标记：>< 开头
+      else if (line.startsWith('><')) {
+        formattedLine = line.slice(2).trim()
+        align = 'center'
+      }
+      // 缩进标记：> 开头（不是>>）
+      else if (line.startsWith('>') && !line.startsWith('>>')) {
+        formattedLine = line.slice(1).trim()
+        indent = 2
+      }
+      // 多重缩进：多个 > 开头
+      else if (/^>+/.test(line)) {
+        const match = line.match(/^(>+)/)
+        if (match) {
+          const arrowCount = match[1].length
+          formattedLine = line.slice(arrowCount).trim()
+          if (line.startsWith('>>')) {
+            align = 'right'
+          } else {
+            indent = arrowCount * 2
+          }
+        }
+      }
+      
+      return {
+        text: formattedLine,
+        align,
+        indent,
+        key: index
+      }
+    })
+  }, [userAnswer])
+  
+  // 插入格式标记
+  const insertFormat = (format: 'indent' | 'outdent' | 'left' | 'right' | 'center') => {
+    if (isSubmitted) return
+    
+    const textarea = document.querySelector('textarea') as HTMLTextAreaElement
+    if (!textarea) return
+    
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+    const selectedText = userAnswer.substring(start, end)
+    
+    // 获取当前行的开始位置
+    const lineStart = userAnswer.lastIndexOf('\n', start - 1) + 1
+    const currentLine = userAnswer.substring(lineStart, userAnswer.indexOf('\n', start) || userAnswer.length)
+    
+    let newLine = currentLine
+    let newAnswer = userAnswer
+    
+    switch (format) {
+      case 'indent':
+        // 添加缩进标记
+        if (currentLine.startsWith('>')) {
+          newLine = '>' + currentLine
+        } else {
+          newLine = '>' + currentLine
+        }
+        newAnswer = userAnswer.substring(0, lineStart) + newLine + userAnswer.substring(lineStart + currentLine.length)
+        break
+        
+      case 'outdent':
+        // 移除缩进标记
+        if (currentLine.startsWith('>')) {
+          newLine = currentLine.slice(1)
+          newAnswer = userAnswer.substring(0, lineStart) + newLine + userAnswer.substring(lineStart + currentLine.length)
+        }
+        break
+        
+      case 'right':
+        // 设置右对齐
+        if (currentLine.startsWith('>')) {
+          // 已有标记，替换为右对齐
+          const cleanLine = currentLine.replace(/^>+/, '')
+          newLine = '>>' + cleanLine
+        } else {
+          newLine = '>>' + currentLine
+        }
+        newAnswer = userAnswer.substring(0, lineStart) + newLine + userAnswer.substring(lineStart + currentLine.length)
+        break
+        
+      case 'left':
+        // 移除所有格式标记
+        newLine = currentLine.replace(/^>+/, '')
+        newAnswer = userAnswer.substring(0, lineStart) + newLine + userAnswer.substring(lineStart + currentLine.length)
+        break
+        
+      case 'center':
+        // 设置居中
+        if (currentLine.startsWith('>')) {
+          const cleanLine = currentLine.replace(/^>+/, '')
+          newLine = '><' + cleanLine
+        } else {
+          newLine = '><' + currentLine
+        }
+        newAnswer = userAnswer.substring(0, lineStart) + newLine + userAnswer.substring(lineStart + currentLine.length)
+        break
+    }
+    
+    onAnswerChange(newAnswer)
+    
+    // 恢复光标位置
+    setTimeout(() => {
+      textarea.focus()
+      textarea.setSelectionRange(start + 1, end + 1)
+    }, 0)
+  }
+  
+  // 应用模板
+  const applyTemplate = (template: string) => {
+    if (isSubmitted) return
+    onAnswerChange(template)
+    setShowTemplates(false)
+    setShowPreview(true)
+  }
   
   return (
     <div 
@@ -90,21 +317,36 @@ export default function WritingPanel({
               {task.title}
             </h2>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setEyeCareMode(!eyeCareMode)}
-            style={{ background: eyeCareMode ? 'rgba(255,255,255,0.5)' : 'transparent' }}
-          >
-            {eyeCareMode ? (
-              <div className="flex items-center gap-1">
-                <span className="text-xs">护眼</span>
-                <Sun className="w-4 h-4 text-amber-600" />
-              </div>
-            ) : (
-              <Moon className="w-4 h-4 text-gray-500" />
-            )}
-          </Button>
+          <div className="flex items-center gap-2">
+            {/* 编辑/预览切换 */}
+            <Button
+              variant={showPreview ? "default" : "outline"}
+              size="sm"
+              onClick={() => setShowPreview(!showPreview)}
+              style={eyeCareMode ? { 
+                borderColor: '#81C784',
+                background: showPreview ? '#66BB6A' : 'rgba(255,255,255,0.7)'
+              } : {}}
+            >
+              {showPreview ? <Eye className="w-4 h-4 mr-1" /> : <Edit3 className="w-4 h-4 mr-1" />}
+              {showPreview ? '预览' : '编辑'}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setEyeCareMode(!eyeCareMode)}
+              style={{ background: eyeCareMode ? 'rgba(255,255,255,0.5)' : 'transparent' }}
+            >
+              {eyeCareMode ? (
+                <div className="flex items-center gap-1">
+                  <span className="text-xs">护眼</span>
+                  <Sun className="w-4 h-4 text-amber-600" />
+                </div>
+              ) : (
+                <Moon className="w-4 h-4 text-gray-500" />
+              )}
+            </Button>
+          </div>
         </div>
         
         {/* 字数统计 */}
@@ -115,69 +357,193 @@ export default function WritingPanel({
           <span style={{ color: isWordCountValid ? '#10b981' : '#ef4444' }}>
             (要求: {task.wordCount.min}-{task.wordCount.max}词)
           </span>
+          {!isSubmitted && showPreview && (
+            <span className="text-xs ml-2" style={{ color: eyeCareMode ? '#689F38' : '#9ca3af' }}>
+              格式标记: {`>`}缩进 {`>>`}右对齐 {`><`}居中
+            </span>
+          )}
         </div>
       </div>
       
       {/* 题目要求 */}
       <div 
-        className="p-4 border-b flex-shrink-0"
+        className="p-3 border-b flex-shrink-0"
         style={{ 
           background: eyeCareMode ? 'rgba(255,255,255,0.5)' : '#f9fafb',
           borderColor: eyeCareMode ? '#A5D6A7' : '#e5e7eb'
         }}
       >
-        <div className="text-sm mb-2" style={{ color: eyeCareMode ? '#33691E' : '#374151' }}>
+        <div className="text-sm" style={{ color: eyeCareMode ? '#33691E' : '#374151' }}>
           {task.description}
         </div>
         
-        {/* 要求列表 */}
-        <ul className="text-sm space-y-1" style={{ color: eyeCareMode ? '#558B2F' : '#6b7280' }}>
-          {task.requirements.map((req, i) => (
-            <li key={i} className="flex items-start gap-2">
-              <span className="text-emerald-500">•</span>
-              {req}
-            </li>
-          ))}
-        </ul>
-        
         {/* 图片（大作文） */}
         {task.image && (
-          <div className="mt-3 p-2 bg-white rounded-lg border">
-            <img src={task.image} alt="作文图片" className="max-w-full h-auto" />
-          </div>
-        )}
-        
-        {/* 提示 */}
-        {task.tips && task.tips.length > 0 && (
-          <div className="mt-3 p-3 rounded-lg" style={{ background: eyeCareMode ? '#C8E6C9' : '#e0f2fe' }}>
-            <div className="text-xs font-medium mb-1" style={{ color: eyeCareMode ? '#2E7D32' : '#0369a1' }}>
-              写作提示
-            </div>
-            <ul className="text-xs space-y-1" style={{ color: eyeCareMode ? '#558B2F' : '#0c4a6e' }}>
-              {task.tips.map((tip, i) => (
-                <li key={i}>• {tip}</li>
-              ))}
-            </ul>
+          <div className="mt-2 p-2 bg-white rounded-lg border inline-block">
+            <img src={task.image} alt="作文图片" className="max-h-32" />
           </div>
         )}
       </div>
+      
+      {/* 格式工具栏 + 模板选择 */}
+      {!isSubmitted && (
+        <div 
+          className="p-2 border-b flex-shrink-0 flex items-center gap-2 flex-wrap"
+          style={{ 
+            background: eyeCareMode ? 'rgba(255,255,255,0.6)' : '#f3f4f6',
+            borderColor: eyeCareMode ? '#A5D6A7' : '#e5e7eb'
+          }}
+        >
+          {/* 格式按钮 */}
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => insertFormat('indent')}
+              title="缩进 (>)"
+              className="h-8 w-8 p-0"
+            >
+              <Indent className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => insertFormat('outdent')}
+              title="取消缩进"
+              className="h-8 w-8 p-0"
+            >
+              <Outdent className="w-4 h-4" />
+            </Button>
+            <div className="w-px h-5 bg-gray-300 mx-1" />
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => insertFormat('left')}
+              title="左对齐"
+              className="h-8 w-8 p-0"
+            >
+              <AlignLeft className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => insertFormat('center')}
+              title="居中 (><)"
+              className="h-8 w-8 p-0"
+            >
+              <AlignCenter className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => insertFormat('right')}
+              title="右对齐 (>>)"
+              className="h-8 w-8 p-0"
+            >
+              <AlignRight className="w-4 h-4" />
+            </Button>
+          </div>
+          
+          {/* 书信模板（仅小作文） */}
+          {task.taskType === 'small' && (
+            <>
+              <div className="w-px h-5 bg-gray-300 mx-1" />
+              <div className="relative">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowTemplates(!showTemplates)}
+                  className="text-xs"
+                  style={eyeCareMode ? { borderColor: '#81C784', background: 'rgba(255,255,255,0.7)' } : {}}
+                >
+                  <FileText className="w-4 h-4 mr-1" />
+                  书信模板
+                </Button>
+                
+                {showTemplates && (
+                  <div 
+                    className="absolute top-full left-0 mt-1 z-50 bg-white rounded-lg shadow-lg border p-2 min-w-[200px]"
+                    style={{ borderColor: eyeCareMode ? '#A5D6A7' : '#e5e7eb' }}
+                  >
+                    {LETTER_TEMPLATES.map((t, i) => (
+                      <button
+                        key={i}
+                        className="w-full text-left px-3 py-2 text-sm rounded hover:bg-gray-100 transition-colors"
+                        onClick={() => applyTemplate(t.template)}
+                      >
+                        {t.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+          
+          <div className="ml-auto">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onAnswerChange('')}
+              className="text-xs text-gray-500"
+            >
+              <RotateCcw className="w-3 h-3 mr-1" />
+              清空
+            </Button>
+          </div>
+        </div>
+      )}
       
       {/* 写作区域 */}
       <div 
         className="flex-1 p-4"
         style={{ minHeight: 0, overflowY: 'auto' }}
       >
-        <Textarea
-          value={userAnswer}
-          onChange={(e) => onAnswerChange(e.target.value)}
-          placeholder="在此输入你的作文..."
-          disabled={isSubmitted}
-          className="min-h-[200px] resize-none"
-          style={{ 
-            background: eyeCareMode ? 'rgba(255,255,255,0.8)' : '#ffffff',
-            borderColor: eyeCareMode ? '#A5D6A7' : '#e5e7eb'
-          }}
-        />
+        {showPreview ? (
+          /* 预览模式 */
+          <div 
+            className="min-h-[200px] p-4 rounded-lg border"
+            style={{ 
+              background: eyeCareMode ? 'rgba(255,255,255,0.9)' : '#ffffff',
+              borderColor: eyeCareMode ? '#A5D6A7' : '#e5e7eb'
+            }}
+          >
+            {previewContent.length === 0 ? (
+              <div className="text-gray-400 text-center py-8">
+                暂无内容，请先输入作文
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {previewContent.map((line) => (
+                  <div 
+                    key={line.key}
+                    style={{ 
+                      textAlign: line.align,
+                      paddingLeft: line.align === 'left' ? `${line.indent}em` : 0,
+                      paddingRight: line.align === 'right' ? '0' : 0,
+                    }}
+                    className="leading-relaxed"
+                  >
+                    {line.text || '\u00A0'}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          /* 编辑模式 */
+          <Textarea
+            value={userAnswer}
+            onChange={(e) => onAnswerChange(e.target.value)}
+            placeholder={"在此输入你的作文...\n\n格式标记说明：\n> 行首添加 > 表示缩进\n>> 行首添加 >> 表示右对齐（用于落款）\n>< 行首添加 >< 表示居中\n\n示例：\nDear Sir/Madam,\n\n>I am writing to...\n\nYours sincerely,\n>>Li Ming"}
+            disabled={isSubmitted}
+            className="min-h-[200px] resize-none font-mono"
+            style={{ 
+              background: eyeCareMode ? 'rgba(255,255,255,0.8)' : '#ffffff',
+              borderColor: eyeCareMode ? '#A5D6A7' : '#e5e7eb'
+            }}
+          />
+        )}
         
         {/* AI 评分结果 */}
         {aiScore && (
@@ -266,22 +632,14 @@ export default function WritingPanel({
         className="p-3 border-t flex-shrink-0"
         style={{ 
           background: eyeCareMode 
-            ? 'linear-gradient(135deg, #C8E6C9 0%, #DCEDC28 100%)'
+            ? 'linear-gradient(135deg, #C8E6C9 0%, #DCEDC8 100%)'
             : '#f9fafb',
           borderColor: eyeCareMode ? '#A5D6A7' : '#e5e7eb'
         }}
       >
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onAnswerChange('')}
-              disabled={isSubmitted}
-            >
-              <RotateCcw className="w-4 h-4 mr-1" />
-              清空
-            </Button>
+          <div className="text-xs" style={{ color: eyeCareMode ? '#558B2F' : '#6b7280' }}>
+            按 Tab 键跳转下一任务
           </div>
           
           {isScoring ? (
