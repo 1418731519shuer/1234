@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { FileText, Sparkles, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react'
@@ -49,6 +50,20 @@ export default function WritingTaskPanel({
   const currentTask = tasks[currentTaskIndex]
   const answeredCount = Object.keys(userAnswers).filter(k => userAnswers[k]?.trim()).length
   const allAnswered = answeredCount === tasks.length
+  
+  // Tab 键跳转下一任务（提交后可用）
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Tab' && isSubmitted) {
+        e.preventDefault()
+        const nextIndex = currentTaskIndex < tasks.length - 1 ? currentTaskIndex + 1 : 0
+        onSelectTask(nextIndex)
+      }
+    }
+    
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [currentTaskIndex, tasks.length, isSubmitted, onSelectTask])
   
   // 计算总分
   const totalScore = aiScores 

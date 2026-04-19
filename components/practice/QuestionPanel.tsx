@@ -65,6 +65,20 @@ export default function QuestionPanel({
   const optionRefs = useRef<Record<string, HTMLSpanElement>>({})
   const stemRefs = useRef<Record<string, HTMLSpanElement>>({})
   
+  // Tab 键跳转下一题（提交后可用）
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Tab' && isSubmitted) {
+        e.preventDefault()
+        const nextIndex = currentIndex < questions.length - 1 ? currentIndex + 1 : 0
+        onNavigate(nextIndex)
+      }
+    }
+    
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [currentIndex, questions.length, isSubmitted, onNavigate])
+  
   // 计时器
   useEffect(() => {
     const timer = setInterval(() => {

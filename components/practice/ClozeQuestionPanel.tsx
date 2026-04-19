@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { CheckCircle2, XCircle } from 'lucide-react'
@@ -52,6 +52,22 @@ export default function ClozeQuestionPanel({
   const currentBlankData = currentBlank ? blanks.find(b => b.blankNum === currentBlank) : null
   const currentAnswer = currentBlank ? answers[currentBlank] : null
   const optionRefs = useRef<Record<string, HTMLSpanElement>>({})
+  
+  // Tab 键跳转下一空（提交后可用）
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Tab' && isSubmitted && currentBlank) {
+        e.preventDefault()
+        const sortedBlanks = [...blanks].sort((a, b) => a.blankNum - b.blankNum)
+        const currentIdx = sortedBlanks.findIndex(b => b.blankNum === currentBlank)
+        const nextIdx = currentIdx < sortedBlanks.length - 1 ? currentIdx + 1 : 0
+        onSelectBlank(sortedBlanks[nextIdx].blankNum)
+      }
+    }
+    
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [currentBlank, blanks, isSubmitted, onSelectBlank])
   
   // 选择选项
   const handleSelectOption = (optionKey: string) => {

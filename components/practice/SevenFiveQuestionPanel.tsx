@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useTextMark, MARK_COLORS, TextMark, MarkColorType } from '@/hooks/useTextMark'
@@ -51,6 +51,20 @@ export default function SevenFiveQuestionPanel({
   
   const currentBlank = blanks[currentIndex]
   const currentAnswer = currentBlank ? answers[currentBlank] : null
+  
+  // Tab 键跳转下一空（提交后可用）
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Tab' && isSubmitted) {
+        e.preventDefault()
+        const nextIndex = currentIndex < blanks.length - 1 ? currentIndex + 1 : 0
+        onNavigate(nextIndex)
+      }
+    }
+    
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [currentIndex, blanks.length, isSubmitted, onNavigate])
   
   // 检查选项是否已被使用
   const isOptionUsed = (optionKey: string, excludeBlank?: number) => {
