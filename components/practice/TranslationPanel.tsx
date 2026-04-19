@@ -470,10 +470,11 @@ export default function TranslationPanel({
       {/* 全文翻译内容 */}
       {showFullTranslation && translationSentences.length > 0 && (
         <div 
-          className="p-4 border-b flex-shrink-0 max-h-[40%] overflow-y-auto"
+          className="p-4 border-b flex-shrink-0 overflow-y-auto"
           style={{ 
             background: eyeCareMode ? '#E8F5E9' : '#f0f9ff',
-            borderColor: eyeCareMode ? '#A5D6A7' : '#bfdbfe'
+            borderColor: eyeCareMode ? '#A5D6A7' : '#bfdbfe',
+            maxHeight: '280px'
           }}
         >
           <div className="flex items-center justify-between mb-3">
