@@ -4,14 +4,14 @@ import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
-import { Clock, Send, ChevronUp, ChevronDown, MessageCircle, CheckCircle2, Loader2, AlertCircle } from 'lucide-react'
+import { Clock, Send, ChevronUp, ChevronDown, MessageCircle, CheckCircle2, Loader2, AlertCircle, Languages, RotateCcw } from 'lucide-react'
 
 interface TranslationSentence {
   id: string
   sentenceNum: number
   englishText: string
   referenceCn?: string
-  keyVocabulary?: string  // JSON: [{word, meaning, score}]
+  keyVocabulary?: string
   grammarPoints?: string
   scoringRules?: string
   userAnswer?: string
@@ -29,26 +29,35 @@ interface TranslationQuestionPanelProps {
   sentences: TranslationSentence[]
   currentIndex: number
   onAnswerChange: (sentenceId: string, answer: string) => void
-  onSubmit: () => void
+  onSelectSentence: (index: number) => void
+  onSubmit: (withAIScore: boolean) => void
   isSubmitted: boolean
   startTime: Date
   onAskAI?: (question: string) => void
   onAIScore?: (sentenceId: string, score: TranslationSentence['aiScore']) => void
+  articleContent?: string
+  articleId?: string
 }
 
 export default function TranslationQuestionPanel({
   sentences,
   currentIndex,
   onAnswerChange,
+  onSelectSentence,
   onSubmit,
   isSubmitted,
   startTime,
   onAskAI,
   onAIScore,
+  articleContent,
+  articleId,
 }: TranslationQuestionPanelProps) {
   const [elapsedTime, setElapsedTime] = useState(0)
   const [isScoring, setIsScoring] = useState(false)
   const [showKeyVocab, setShowKeyVocab] = useState(true)
+  const [showFullTranslation, setShowFullTranslation] = useState(false)
+  const [fullTranslation, setFullTranslation] = useState<string>('')
+  const [isTranslating, setIsTranslating] = useState(false)
   
   const currentSentence = sentences[currentIndex]
   const answeredCount = sentences.filter(s => s.userAnswer && s.userAnswer.trim()).length
@@ -80,19 +89,56 @@ export default function TranslationQuestionPanel({
   
   const keyVocabList = parseKeyVocabulary(currentSentence.keyVocabulary)
   
+  // 全文翻译
+  const handleFullTranslation = async () => {
+    if (!articleContent || !articleId) return
+    
+    setIsTranslating(true)
+    try {
+      const response = await fetch('/api/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          articleId,
+          content: articleContent,
+        }),
+      })
+      const data = await response.json()
+      
+      if (data.sentences && Array.isArray(data.sentences)) {
+        // 逐句翻译格式
+        const translationText = data.sentences
+          .map((s: any) => `${s.english}\n${s.chinese}`)
+          .join('\n\n')
+        setFullTranslation(translationText)
+      } else if (data.translation) {
+        setFullTranslation(data.translation)
+      }
+    } catch (error) {
+      console.error('Translation error:', error)
+    } finally {
+      setIsTranslating(false)
+    }
+  }
+  
   // AI 评分
   const handleAIScore = async () => {
     if (!currentSentence.userAnswer || !onAIScore) return
     
     setIsScoring(true)
     try {
-      const response = await fetch('/api/ai/chat', {
+      // 直接调用 DeepSeek API
+      const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_DEEPSEEK_API_KEY || 'sk-864e66eafdc648a6ba27607b1518f9bc'}`,
+        },
         body: JSON.stringify({
+          model: 'deepseek-chat',
           messages: [{
             role: 'user',
-            content: `请对以下翻译进行评分：
+            content: `请对以下翻译进行评分，严格按照JSON格式返回：
 
 【英文原句】
 ${currentSentence.englishText}
@@ -103,47 +149,39 @@ ${currentSentence.referenceCn || '暂无'}
 【用户翻译】
 ${currentSentence.userAnswer}
 
-【重点词汇】
-${keyVocabList.map((v: any) => `${v.word}: ${v.meaning}`).join('\n')}
-
-请按以下格式返回JSON：
-{
-  "vocabScore": 词汇得分(0-1分),
-  "fluencyScore": 语义通顺度得分(0-1分),
-  "totalScore": 总分(0-2分),
-  "feedback": "详细反馈",
-  "keyWordsCorrect": ["翻译正确的关键词"],
-  "keyWordsMissing": ["遗漏或翻译错误的关键词"]
-}
+请返回以下JSON格式（不要有其他内容）：
+{"vocabScore":0.8,"fluencyScore":0.7,"totalScore":1.5,"feedback":"详细反馈","keyWordsCorrect":["词1","词2"],"keyWordsMissing":["词3"]}
 
 评分标准：
-- 词汇得分：重点词汇翻译是否正确
-- 语义通顺度：译文是否通顺、符合中文表达习惯
-- 总分 = 词汇得分 + 语义通顺度得分`
-          }]
-        })
+- vocabScore (0-1分)：重点词汇翻译是否正确
+- fluencyScore (0-1分)：译文是否通顺、符合中文表达习惯
+- totalScore (0-2分)：总分
+- feedback：详细反馈（50字以内）
+- keyWordsCorrect：翻译正确的关键词数组
+- keyWordsMissing：遗漏或翻译错误的关键词数组`
+          }],
+          temperature: 0.3,
+        }),
       })
       
       const data = await response.json()
+      const content = data.choices?.[0]?.message?.content || ''
       
-      // 尝试解析 AI 返回的 JSON
+      // 解析 JSON
       let scoreData
       try {
-        // 尝试从 markdown 代码块中提取 JSON
-        const jsonMatch = data.content.match(/```json\s*([\s\S]*?)\s*```/) || 
-                          data.content.match(/\{[\s\S]*\}/)
+        const jsonMatch = content.match(/\{[\s\S]*\}/)
         if (jsonMatch) {
-          scoreData = JSON.parse(jsonMatch[1] || jsonMatch[0])
+          scoreData = JSON.parse(jsonMatch[0])
         } else {
-          scoreData = JSON.parse(data.content)
+          throw new Error('No JSON found')
         }
       } catch {
-        // 如果解析失败，使用默认评分
         scoreData = {
           vocabScore: 0.5,
           fluencyScore: 0.5,
-          totalScore: 1,
-          feedback: data.content,
+          totalScore: 1.0,
+          feedback: content.slice(0, 100),
           keyWordsCorrect: [],
           keyWordsMissing: []
         }
@@ -152,6 +190,15 @@ ${keyVocabList.map((v: any) => `${v.word}: ${v.meaning}`).join('\n')}
       onAIScore(currentSentence.id, scoreData)
     } catch (error) {
       console.error('AI scoring error:', error)
+      // 默认评分
+      onAIScore(currentSentence.id, {
+        vocabScore: 0.5,
+        fluencyScore: 0.5,
+        totalScore: 1.0,
+        feedback: '评分服务暂时不可用，请稍后重试',
+        keyWordsCorrect: [],
+        keyWordsMissing: []
+      })
     } finally {
       setIsScoring(false)
     }
@@ -182,6 +229,37 @@ ${keyVocabList.map((v: any) => `${v.word}: ${v.meaning}`).join('\n')}
             <Clock className="w-4 h-4" />
             <span>{formatTime(elapsedTime)}</span>
           </div>
+        </div>
+      </div>
+      
+      {/* 句子导航 */}
+      <div className="p-2 border-b bg-white flex-shrink-0">
+        <div className="flex gap-1 justify-center flex-wrap">
+          {sentences.map((sentence, index) => {
+            const isCurrent = index === currentIndex
+            const hasAnswer = !!sentence.userAnswer
+            
+            return (
+              <button
+                key={sentence.id}
+                onClick={() => onSelectSentence(index)}
+                className={`
+                  w-8 h-8 rounded-lg font-medium text-sm transition-all
+                  ${isCurrent ? 'ring-2 ring-offset-2 ring-blue-500' : ''}
+                  ${isSubmitted && sentence.aiScore
+                    ? sentence.aiScore.totalScore >= 1.5 
+                      ? 'bg-green-100 text-green-700 border-2 border-green-400'
+                      : 'bg-red-100 text-red-700 border-2 border-red-400'
+                    : hasAnswer
+                      ? 'bg-blue-100 text-blue-700 border-2 border-blue-400'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }
+                `}
+              >
+                {sentence.sentenceNum}
+              </button>
+            )
+          })}
         </div>
       </div>
       
@@ -268,7 +346,7 @@ ${keyVocabList.map((v: any) => `${v.word}: ${v.meaning}`).join('\n')}
             {/* 关键词反馈 */}
             {currentSentence.aiScore.keyWordsCorrect && currentSentence.aiScore.keyWordsCorrect.length > 0 && (
               <div className="p-3 rounded-lg bg-green-50 border border-green-200">
-                <div className="text-xs font-medium text-green-700 mb-1">✓ 翻译正确的关键词</div>
+                <div className="text-xs font-medium text-green-700 mb-1">翻译正确的关键词</div>
                 <div className="flex flex-wrap gap-1">
                   {currentSentence.aiScore.keyWordsCorrect.map((word, i) => (
                     <span key={i} className="px-2 py-0.5 rounded bg-green-100 text-green-700 text-xs">
@@ -281,7 +359,7 @@ ${keyVocabList.map((v: any) => `${v.word}: ${v.meaning}`).join('\n')}
             
             {currentSentence.aiScore.keyWordsMissing && currentSentence.aiScore.keyWordsMissing.length > 0 && (
               <div className="p-3 rounded-lg bg-red-50 border border-red-200">
-                <div className="text-xs font-medium text-red-700 mb-1">✗ 遗漏或错误的关键词</div>
+                <div className="text-xs font-medium text-red-700 mb-1">遗漏或错误的关键词</div>
                 <div className="flex flex-wrap gap-1">
                   {currentSentence.aiScore.keyWordsMissing.map((word, i) => (
                     <span key={i} className="px-2 py-0.5 rounded bg-red-100 text-red-700 text-xs">
@@ -310,6 +388,41 @@ ${keyVocabList.map((v: any) => `${v.word}: ${v.meaning}`).join('\n')}
           </div>
         )}
         
+        {/* 全文翻译 */}
+        {isSubmitted && (
+          <div className="mb-4">
+            <button
+              className="flex items-center gap-2 text-xs font-medium text-blue-600 mb-2"
+              onClick={() => {
+                if (!showFullTranslation && !fullTranslation) {
+                  handleFullTranslation()
+                }
+                setShowFullTranslation(!showFullTranslation)
+              }}
+            >
+              <Languages className="w-4 h-4" />
+              <span>全文翻译</span>
+              {showFullTranslation ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </button>
+            {showFullTranslation && (
+              <div className="p-4 rounded-xl bg-blue-50 border border-blue-200">
+                {isTranslating ? (
+                  <div className="flex items-center gap-2 text-blue-600">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>翻译中...</span>
+                  </div>
+                ) : fullTranslation ? (
+                  <div className="text-sm text-blue-900 leading-relaxed whitespace-pre-wrap">
+                    {fullTranslation}
+                  </div>
+                ) : (
+                  <div className="text-sm text-blue-600">点击上方按钮获取全文翻译</div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+        
         {/* AI助教按钮 */}
         {onAskAI && (
           <div className="mb-4">
@@ -320,36 +433,44 @@ ${keyVocabList.map((v: any) => `${v.word}: ${v.meaning}`).join('\n')}
               className="text-emerald-600 border-emerald-200"
             >
               <MessageCircle className="w-4 h-4 mr-1" />
-              🐱 AI助教点评
+              AI助教点评
             </Button>
           </div>
         )}
       </div>
       
-      {/* 底部导航 */}
+      {/* 底部提交区 */}
       <div className="p-3 border-t bg-white flex-shrink-0">
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-sm text-slate-500">
-            {currentIndex + 1} / {sentences.length}
-          </span>
-        </div>
-        
-        {/* 提交按钮 */}
         {!isSubmitted ? (
-          <Button
-            className="w-full bg-emerald-500 hover:bg-emerald-600"
-            disabled={!allAnswered}
-            onClick={onSubmit}
-          >
-            {allAnswered ? (
-              <>
-                <Send className="w-4 h-4 mr-1" />
-                提交翻译
-              </>
-            ) : (
-              `还有 ${sentences.length - answeredCount} 句未翻译`
+          <div className="space-y-2">
+            {/* 直接提交 */}
+            <Button
+              className="w-full bg-emerald-500 hover:bg-emerald-600"
+              disabled={!allAnswered}
+              onClick={() => onSubmit(false)}
+            >
+              {allAnswered ? (
+                <>
+                  <Send className="w-4 h-4 mr-1" />
+                  提交翻译
+                </>
+              ) : (
+                `还有 ${sentences.length - answeredCount} 句未翻译`
+              )}
+            </Button>
+            
+            {/* AI评分提交 */}
+            {allAnswered && (
+              <Button
+                variant="outline"
+                className="w-full text-blue-600 border-blue-200 hover:bg-blue-50"
+                onClick={() => onSubmit(true)}
+              >
+                <AlertCircle className="w-4 h-4 mr-1" />
+                提交并AI评分
+              </Button>
             )}
-          </Button>
+          </div>
         ) : (
           <div className="space-y-2">
             {/* AI 评分按钮 */}

@@ -58,6 +58,7 @@ export default function TranslationPracticePage({ params }: { params: Promise<{ 
   const [startTime] = useState(new Date())
   const [practiceId, setPracticeId] = useState<string>('')
   const [aiQuestion, setAiQuestion] = useState<string>('')
+  const [isBatchScoring, setIsBatchScoring] = useState(false)
   
   // 标记功能
   const textMark = useTextMark(isSubmitted)
@@ -107,13 +108,88 @@ export default function TranslationPracticePage({ params }: { params: Promise<{ 
     ))
   }
   
-  const handleAIScore = (sentenceId: string, score: TranslationSentence['aiScore']) => {
+  const handleAIScore = async (sentenceId: string, score: TranslationSentence['aiScore']) => {
     setSentences(prev => prev.map(s => 
       s.id === sentenceId ? { ...s, aiScore: score } : s
     ))
   }
   
-  const handleSubmit = async () => {
+  // 批量AI评分
+  const batchAIScore = async () => {
+    setIsBatchScoring(true)
+    
+    for (let i = 0; i < sentences.length; i++) {
+      const sentence = sentences[i]
+      if (!sentence.userAnswer || sentence.aiScore) continue
+      
+      try {
+        const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer sk-864e66eafdc648a6ba27607b1518f9bc`,
+          },
+          body: JSON.stringify({
+            model: 'deepseek-chat',
+            messages: [{
+              role: 'user',
+              content: `请对以下翻译进行评分，严格按照JSON格式返回：
+
+【英文原句】
+${sentence.englishText}
+
+【参考译文】
+${sentence.referenceCn || '暂无'}
+
+【用户翻译】
+${sentence.userAnswer}
+
+请返回以下JSON格式（不要有其他内容）：
+{"vocabScore":0.8,"fluencyScore":0.7,"totalScore":1.5,"feedback":"详细反馈","keyWordsCorrect":["词1"],"keyWordsMissing":["词2"]}`
+            }],
+            temperature: 0.3,
+          }),
+        })
+        
+        const data = await response.json()
+        const content = data.choices?.[0]?.message?.content || ''
+        
+        let scoreData
+        try {
+          const jsonMatch = content.match(/\{[\s\S]*\}/)
+          if (jsonMatch) {
+            scoreData = JSON.parse(jsonMatch[0])
+          } else {
+            throw new Error('No JSON')
+          }
+        } catch {
+          scoreData = {
+            vocabScore: 0.5,
+            fluencyScore: 0.5,
+            totalScore: 1.0,
+            feedback: '评分完成',
+            keyWordsCorrect: [],
+            keyWordsMissing: []
+          }
+        }
+        
+        setSentences(prev => prev.map(s => 
+          s.id === sentence.id ? { ...s, aiScore: scoreData } : s
+        ))
+      } catch (error) {
+        console.error('Batch score error:', error)
+      }
+      
+      // 稍微延迟避免API限流
+      if (i < sentences.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 500))
+      }
+    }
+    
+    setIsBatchScoring(false)
+  }
+  
+  const handleSubmit = async (withAIScore: boolean) => {
     if (!article || !practiceId) return
     
     const answers: Record<string, string> = {}
@@ -135,6 +211,11 @@ export default function TranslationPracticePage({ params }: { params: Promise<{ 
       })
       
       setIsSubmitted(true)
+      
+      // 如果选择AI评分，则批量评分
+      if (withAIScore) {
+        batchAIScore()
+      }
     } catch (error) {
       console.error('Submit error:', error)
     }
@@ -208,6 +289,12 @@ export default function TranslationPracticePage({ params }: { params: Promise<{ 
             {isSubmitted && (
               <Badge className="bg-emerald-500 text-white text-sm">已完成</Badge>
             )}
+            {isBatchScoring && (
+              <Badge className="bg-blue-500 text-white text-sm">
+                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                AI评分中
+              </Badge>
+            )}
           </div>
         </div>
         {/* 模式提示 */}
@@ -247,11 +334,14 @@ export default function TranslationPracticePage({ params }: { params: Promise<{ 
             sentences={sentences}
             currentIndex={currentIndex}
             onAnswerChange={handleAnswerChange}
+            onSelectSentence={setCurrentIndex}
             onSubmit={handleSubmit}
             isSubmitted={isSubmitted}
             startTime={startTime}
             onAskAI={handleAskAI}
             onAIScore={handleAIScore}
+            articleContent={article.content}
+            articleId={article.id}
           />
         </div>
         
