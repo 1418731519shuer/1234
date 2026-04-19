@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
@@ -51,10 +51,30 @@ export default function TranslationQuestionPanel({
   const [elapsedTime, setElapsedTime] = useState(0)
   const [isScoring, setIsScoring] = useState(false)
   const [showKeyVocab, setShowKeyVocab] = useState(true)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
   
   const currentSentence = sentences[currentIndex]
   const answeredCount = sentences.filter(s => s.userAnswer && s.userAnswer.trim()).length
   const allAnswered = answeredCount === sentences.length
+  
+  // Tab 键跳转到下一个翻译
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Tab' && !isSubmitted) {
+        e.preventDefault()
+        // 跳转到下一个句子，如果是最后一个则跳转到第一个
+        const nextIndex = currentIndex < sentences.length - 1 ? currentIndex + 1 : 0
+        onSelectSentence(nextIndex)
+        // 聚焦到新的 textarea
+        setTimeout(() => {
+          textareaRef.current?.focus()
+        }, 0)
+      }
+    }
+    
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [currentIndex, sentences.length, isSubmitted, onSelectSentence])
   
   // 计时器
   useEffect(() => {
@@ -260,6 +280,7 @@ ${currentSentence.userAnswer}
         <div className="mb-4">
           <div className="text-xs font-medium text-slate-500 mb-2">你的翻译</div>
           <Textarea
+            ref={textareaRef}
             value={currentSentence.userAnswer || ''}
             onChange={(e) => onAnswerChange(currentSentence.id, e.target.value)}
             placeholder="请输入中文翻译..."
@@ -267,7 +288,7 @@ ${currentSentence.userAnswer}
             className="min-h-[100px] resize-none"
           />
           <div className="text-xs text-slate-400 mt-1">
-            建议字数：20-50字
+            按 Tab 键跳转到下一句
           </div>
         </div>
         

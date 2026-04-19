@@ -54,6 +54,7 @@ export default function TranslationPanel({
   // 全文翻译
   const [showFullTranslation, setShowFullTranslation] = useState(false)
   const [fullTranslation, setFullTranslation] = useState<string>(savedTranslation || '')
+  const [translationSentences, setTranslationSentences] = useState<Array<{english: string, chinese: string}>>([])
   const [isTranslating, setIsTranslating] = useState(false)
   
   // 生词功能
@@ -74,9 +75,42 @@ export default function TranslationPanel({
   
   // 全文翻译
   const handleFullTranslation = async () => {
-    if (fullTranslation) {
-      setShowFullTranslation(!showFullTranslation)
+    if (showFullTranslation) {
+      setShowFullTranslation(false)
       return
+    }
+    
+    // 如果已有翻译句子数据，直接显示
+    if (translationSentences.length > 0) {
+      setShowFullTranslation(true)
+      return
+    }
+    
+    // 如果有已保存的翻译文本，尝试解析
+    if (savedTranslation) {
+      try {
+        const parsed = JSON.parse(savedTranslation)
+        if (Array.isArray(parsed)) {
+          setTranslationSentences(parsed)
+          setShowFullTranslation(true)
+          return
+        }
+      } catch {
+        // 不是JSON格式，按行解析
+        const lines = savedTranslation.split('\n\n').filter(l => l.trim())
+        const sentences: Array<{english: string, chinese: string}> = []
+        for (const line of lines) {
+          const parts = line.split('\n')
+          if (parts.length >= 2) {
+            sentences.push({ english: parts[0], chinese: parts[1] })
+          }
+        }
+        if (sentences.length > 0) {
+          setTranslationSentences(sentences)
+          setShowFullTranslation(true)
+          return
+        }
+      }
     }
     
     if (!articleId || !content) return
@@ -94,10 +128,8 @@ export default function TranslationPanel({
       const data = await response.json()
       
       if (data.sentences && Array.isArray(data.sentences)) {
-        const translationText = data.sentences
-          .map((s: any) => `${s.english}\n${s.chinese}`)
-          .join('\n\n')
-        setFullTranslation(translationText)
+        setTranslationSentences(data.sentences)
+        setFullTranslation(JSON.stringify(data.sentences))
       } else if (data.translation) {
         setFullTranslation(data.translation)
       }
@@ -436,7 +468,7 @@ export default function TranslationPanel({
       </div>
       
       {/* 全文翻译内容 */}
-      {showFullTranslation && fullTranslation && (
+      {showFullTranslation && translationSentences.length > 0 && (
         <div 
           className="p-4 border-b flex-shrink-0 max-h-[40%] overflow-y-auto"
           style={{ 
@@ -444,9 +476,9 @@ export default function TranslationPanel({
             borderColor: eyeCareMode ? '#A5D6A7' : '#bfdbfe'
           }}
         >
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between mb-3">
             <span className="text-sm font-medium" style={{ color: eyeCareMode ? '#2E7D32' : '#1e40af' }}>
-              全文翻译
+              全文翻译（逐句对照）
             </span>
             <button
               className="text-xs text-slate-400 hover:text-slate-600"
@@ -455,8 +487,19 @@ export default function TranslationPanel({
               收起
             </button>
           </div>
-          <div className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: eyeCareMode ? '#33691E' : '#374151' }}>
-            {fullTranslation}
+          <div className="space-y-3">
+            {translationSentences.map((sentence, i) => (
+              <div 
+                key={i} 
+                className="p-3 rounded-lg bg-amber-50/50 border border-amber-100"
+                style={eyeCareMode ? { background: 'rgba(255,255,255,0.6)', borderColor: '#A5D6A7' } : {}}
+              >
+                <p className="text-sm text-gray-600 leading-relaxed mb-2">{sentence.english}</p>
+                <p className="text-[15px] leading-relaxed" style={{ color: eyeCareMode ? '#33691E' : '#374151' }}>
+                  {sentence.chinese}
+                </p>
+              </div>
+            ))}
           </div>
         </div>
       )}

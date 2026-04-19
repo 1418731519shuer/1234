@@ -1,5 +1,90 @@
 import { NextRequest, NextResponse } from 'next/server'
+import crypto from 'crypto'
 import prisma from '@/lib/db'
+
+// 腾讯翻译API配置
+const SECRET_ID = process.env.TENCENT_SECRET_ID || 'AKIDu889wUnz0pQnvqZ4KM9hz2rTr4KAoDQP'
+const SECRET_KEY = process.env.TENCENT_SECRET_KEY || 'mg5IG0jSzIMCoDOK3wjMo350kBXeiY8u'
+const REGION = 'ap-beijing'
+const SERVICE = 'tmt'
+const HOST = 'tmt.tencentcloudapi.com'
+const ACTION = 'TextTranslate'
+const VERSION = '2018-03-21'
+
+// 生成腾讯云API签名
+function generateSignature(payload: string, timestamp: number): string {
+  const date = new Date(timestamp * 1000).toISOString().split('T')[0]
+  
+  // 步骤1：拼接规范请求串
+  const httpRequestMethod = 'POST'
+  const canonicalUri = '/'
+  const canonicalQueryString = ''
+  const canonicalHeaders = `content-type:application/json\nhost:${HOST}\n`
+  const signedHeaders = 'content-type;host'
+  const hashedRequestPayload = crypto.createHash('sha256').update(payload).digest('hex')
+  const canonicalRequest = `${httpRequestMethod}\n${canonicalUri}\n${canonicalQueryString}\n${canonicalHeaders}\n${signedHeaders}\n${hashedRequestPayload}`
+  
+  // 步骤2：拼接待签名字符串
+  const algorithm = 'TC3-HMAC-SHA256'
+  const credentialScope = `${date}/${SERVICE}/tc3_request`
+  const hashedCanonicalRequest = crypto.createHash('sha256').update(canonicalRequest).digest('hex')
+  const stringToSign = `${algorithm}\n${timestamp}\n${credentialScope}\n${hashedCanonicalRequest}`
+  
+  // 步骤3：计算签名
+  const secretDate = crypto.createHmac('sha256', `TC3${SECRET_KEY}`).update(date).digest()
+  const secretService = crypto.createHmac('sha256', secretDate).update(SERVICE).digest()
+  const secretSigning = crypto.createHmac('sha256', secretService).update('tc3_request').digest()
+  const signature = crypto.createHmac('sha256', secretSigning).update(stringToSign).digest('hex')
+  
+  // 步骤4：拼接 Authorization
+  const authorization = `${algorithm} Credential=${SECRET_ID}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`
+  
+  return authorization
+}
+
+// 调用腾讯翻译API
+async function translateWithTencent(text: string): Promise<string> {
+  const timestamp = Math.floor(Date.now() / 1000)
+  
+  const body = {
+    Source: 'auto',
+    SourceText: text,
+    Target: 'zh',
+    ProjectId: 0,
+  }
+  
+  const payload = JSON.stringify(body)
+  const authorization = generateSignature(payload, timestamp)
+  
+  const response = await fetch(`https://${HOST}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Host': HOST,
+      'X-TC-Action': ACTION,
+      'X-TC-Version': VERSION,
+      'X-TC-Region': REGION,
+      'X-TC-Timestamp': timestamp.toString(),
+      'Authorization': authorization,
+    },
+    body: payload,
+  })
+  
+  const data = await response.json()
+  
+  if (data.Response?.Error) {
+    throw new Error(data.Response.Error.Message)
+  }
+  
+  return data.Response?.TargetText || ''
+}
+
+// 按句子分割文章
+function splitIntoSentences(text: string): string[] {
+  // 按句号、问号、感叹号分割，保留标点
+  const sentences = text.split(/(?<=[.!?])\s+/).filter(s => s.trim())
+  return sentences
+}
 
 // POST /api/translate - 翻译文章（逐句对照）
 export async function POST(request: NextRequest) {
@@ -27,85 +112,40 @@ export async function POST(request: NextRequest) {
       }
     }
     
-    // 调用DeepSeek API进行翻译
-    const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY || ''}`,
-      },
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        messages: [
-          {
-            role: 'system',
-            content: `你是一位专业的考研英语翻译专家。请将用户提供的英文文章翻译成中文。
-
-要求：
-1. 按句子翻译，每个句子单独一行
-2. 返回JSON数组格式，每个元素包含 english 和 chinese 两个字段
-3. 翻译准确、流畅，符合考研英语难度
-4. 对于专业术语，可以在括号中保留英文原文
-5. 长句可以适当拆分，但保持语义完整
-
-返回格式示例：
-[
-  {"english": "The quick brown fox jumps over the lazy dog.", "chinese": "那只敏捷的棕色狐狸跳过了懒惰的狗。"},
-  {"english": "This is another sentence.", "chinese": "这是另一个句子。"}
-]
-
-只返回JSON数组，不要添加任何其他文字。`
-          },
-          {
-            role: 'user',
-            content: `请翻译以下英文文章，按句子返回JSON数组：\n\n${content}`
-          }
-        ],
-        max_tokens: 4000,
-        temperature: 0.3,
-      }),
-    })
+    // 分割句子
+    const englishSentences = splitIntoSentences(content)
     
-    if (!response.ok) {
-      // 返回模拟翻译
-      const sentences = content.split(/[.!?]+/).filter((s: string) => s.trim()).map((s: string) => ({
-        english: s.trim() + '.',
-        chinese: `[翻译] ${s.trim().slice(0, 50)}...`
-      }))
-      return NextResponse.json({ sentences })
-    }
+    // 使用腾讯翻译API翻译每个句子
+    const translationSentences = []
     
-    const data = await response.json()
-    const translationText = data.choices?.[0]?.message?.content || '[]'
-    
-    // 解析翻译结果
-    let sentences = []
-    try {
-      // 尝试提取JSON数组
-      const jsonMatch = translationText.match(/\[[\s\S]*\]/)
-      if (jsonMatch) {
-        sentences = JSON.parse(jsonMatch[0])
-      } else {
-        sentences = JSON.parse(translationText)
+    for (const sentence of englishSentences) {
+      try {
+        const chinese = await translateWithTencent(sentence)
+        translationSentences.push({
+          english: sentence,
+          chinese: chinese,
+        })
+        
+        // 避免请求过快，添加延迟
+        await new Promise(resolve => setTimeout(resolve, 100))
+      } catch (error) {
+        console.error('Translation error for sentence:', sentence, error)
+        translationSentences.push({
+          english: sentence,
+          chinese: '[翻译失败]',
+        })
       }
-    } catch {
-      // 如果解析失败，按行分割
-      const lines = translationText.split('\n').filter((l: string) => l.trim())
-      sentences = lines.map((line: string, i: number) => ({
-        english: content.split(/[.!?]+/)[i]?.trim() + '.' || '',
-        chinese: line
-      }))
     }
     
     // 保存翻译到数据库
-    if (articleId && sentences.length > 0) {
+    if (articleId && translationSentences.length > 0) {
       await prisma.article.update({
         where: { id: articleId },
-        data: { translation: JSON.stringify(sentences) },
+        data: { translation: JSON.stringify(translationSentences) },
       })
     }
     
-    return NextResponse.json({ sentences })
+    return NextResponse.json({ sentences: translationSentences })
   } catch (error) {
     console.error('Translate error:', error)
     return NextResponse.json(
