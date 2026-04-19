@@ -2,14 +2,19 @@ import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import prisma from '@/lib/db'
 
-// 腾讯翻译API配置
-const SECRET_ID = process.env.TENCENT_SECRET_ID || 'AKIDu889wUnz0pQnvqZ4KM9hz2rTr4KAoDQP'
-const SECRET_KEY = process.env.TENCENT_SECRET_KEY || 'mg5IG0jSzIMCoDOK3wjMo350kBXeiY8u'
+// 腾讯翻译API配置 - 从环境变量读取
+const SECRET_ID = process.env.TENCENT_SECRET_ID
+const SECRET_KEY = process.env.TENCENT_SECRET_KEY
 const REGION = 'ap-beijing'
 const SERVICE = 'tmt'
 const HOST = 'tmt.tencentcloudapi.com'
 const ACTION = 'TextTranslate'
 const VERSION = '2018-03-21'
+
+// 检查密钥是否存在
+if (!SECRET_ID || !SECRET_KEY) {
+  console.warn('警告: 腾讯翻译API密钥未配置，请设置 TENCENT_SECRET_ID 和 TENCENT_SECRET_KEY 环境变量')
+}
 
 // 生成腾讯云API签名
 function generateSignature(payload: string, timestamp: number): string {
