@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
@@ -14,6 +14,7 @@ import {
   Clock,
   Flag
 } from 'lucide-react'
+import { useTextMark, MARK_COLOR, TextMark } from '@/hooks/useTextMark'
 
 interface Question {
   id: string
@@ -38,6 +39,7 @@ interface QuestionPanelProps {
   onNavigate: (index: number) => void
   onSubmit: () => void
   startTime: Date
+  textMark?: ReturnType<typeof useTextMark>
 }
 
 const COLORS = [
@@ -57,8 +59,10 @@ export default function QuestionPanel({
   onNavigate,
   onSubmit,
   startTime,
+  textMark,
 }: QuestionPanelProps) {
   const [elapsedTime, setElapsedTime] = useState(0)
+  const optionRefs = useRef<Record<string, HTMLDivElement>>({})
   
   // 计时器
   useEffect(() => {
@@ -89,6 +93,76 @@ export default function QuestionPanel({
   const isCorrect = (questionId: string) => {
     const question = questions.find(q => q.id === questionId)
     return question && answers[questionId] === question.correctAnswer
+  }
+  
+  // 处理选项文本选择（标记模式）
+  const handleOptionMouseUp = useCallback((optionKey: string, e: React.MouseEvent) => {
+    if (!textMark?.isMarkMode || isSubmitted) return
+    
+    const selection = window.getSelection()
+    if (!selection || selection.isCollapsed) return
+    
+    const selectedText = selection.toString().trim()
+    if (!selectedText) return
+    
+    const container = optionRefs.current[optionKey]
+    if (!container) return
+    
+    const range = selection.getRangeAt(0)
+    
+    // 获取选中文本在容器内的位置
+    const preSelectionRange = document.createRange()
+    preSelectionRange.selectNodeContents(container)
+    preSelectionRange.setEnd(range.startContainer, range.startOffset)
+    const start = preSelectionRange.toString().length
+    
+    const end = start + selectedText.length
+    
+    textMark.addMark('option', selectedText, start, end, optionKey)
+    selection.removeAllRanges()
+  }, [textMark, isSubmitted])
+  
+  // 点击标记删除
+  const handleMarkClick = useCallback((mark: TextMark, e: React.MouseEvent) => {
+    e.stopPropagation()
+    textMark?.removeMark(mark.id)
+  }, [textMark])
+  
+  // 渲染带标记的选项内容
+  const renderMarkedOption = (optionKey: string, content: string) => {
+    if (!textMark) return <span>{content}</span>
+    
+    const optionMarks = textMark.getMarks('option', optionKey)
+    if (optionMarks.length === 0) return <span>{content}</span>
+    
+    const elements: React.ReactNode[] = []
+    let lastIndex = 0
+    
+    optionMarks.forEach((mark, i) => {
+      if (mark.start > lastIndex) {
+        elements.push(
+          <span key={`text-${i}`}>{content.slice(lastIndex, mark.start)}</span>
+        )
+      }
+      elements.push(
+        <span
+          key={`mark-${mark.id}`}
+          className="cursor-pointer rounded px-0.5"
+          style={{ background: MARK_COLOR }}
+          onClick={(e) => handleMarkClick(mark, e)}
+          title="点击删除标记"
+        >
+          {content.slice(mark.start, mark.end)}
+        </span>
+      )
+      lastIndex = mark.end
+    })
+    
+    if (lastIndex < content.length) {
+      elements.push(<span key="text-end">{content.slice(lastIndex)}</span>)
+    }
+    
+    return elements
   }
 
   return (
@@ -180,6 +254,7 @@ export default function QuestionPanel({
             <RadioGroup
               value={answers[currentQuestion.id] || ''}
               onValueChange={(value) => {
+                if (textMark?.isMarkMode) return // 标记模式下不选择
                 onAnswer(currentQuestion.id, value)
                 // 选择后自动跳到下一题（如果不是最后一题）
                 if (currentIndex < questions.length - 1) {
@@ -192,6 +267,7 @@ export default function QuestionPanel({
               {currentQuestion.options.map((option) => {
                 const isSelected = answers[currentQuestion.id] === option.optionKey
                 const isCorrectOption = option.optionKey === currentQuestion.correctAnswer
+                const optionMarkCount = textMark?.getMarkCount('option', option.optionKey) || 0
                 
                 let optionClass = 'border-gray-200'
                 if (isSubmitted) {
@@ -207,20 +283,35 @@ export default function QuestionPanel({
                 return (
                   <div
                     key={option.id}
+                    ref={(el) => { if (el) optionRefs.current[option.optionKey] = el }}
                     className={`
-                      flex items-center space-x-3 p-3 rounded-lg border-2 transition-all
+                      flex items-center space-x-3 p-3 rounded-lg border-2 transition-all relative
                       ${optionClass}
-                      ${!isSubmitted && 'hover:bg-gray-50 cursor-pointer'}
+                      ${!isSubmitted && !textMark?.isMarkMode && 'hover:bg-gray-50 cursor-pointer'}
+                      ${textMark?.isMarkMode ? 'cursor-text' : ''}
                     `}
+                    onMouseUp={(e) => handleOptionMouseUp(option.optionKey, e)}
                   >
                     <RadioGroupItem value={option.optionKey} id={option.id} />
                     <Label 
                       htmlFor={option.id} 
-                      className={`flex-1 cursor-pointer ${isSubmitted && isCorrectOption ? 'font-medium text-green-700' : ''}`}
+                      className={`flex-1 ${textMark?.isMarkMode ? '' : 'cursor-pointer'} ${isSubmitted && isCorrectOption ? 'font-medium text-green-700' : ''}`}
                     >
                       <span className="font-medium mr-2">{option.optionKey}.</span>
-                      {option.content}
+                      {renderMarkedOption(option.optionKey, option.content)}
                     </Label>
+                    {optionMarkCount > 0 && !isSubmitted && (
+                      <span 
+                        className="text-xs px-1.5 py-0.5 rounded-full bg-yellow-100 text-yellow-700 cursor-pointer hover:bg-yellow-200"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          textMark?.clearRegionMarks('option', option.optionKey)
+                        }}
+                        title="点击清除标记"
+                      >
+                        {optionMarkCount} 标记
+                      </span>
+                    )}
                     {isSubmitted && isCorrectOption && (
                       <CheckCircle2 className="w-5 h-5 text-green-500" />
                     )}

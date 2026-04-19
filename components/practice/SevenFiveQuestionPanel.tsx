@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { useTextMark, MARK_COLOR, TextMark } from '@/hooks/useTextMark'
 
 interface SevenFiveQuestionPanelProps {
   options: Array<{ key: string; content: string }>  // A-G段落
@@ -16,6 +17,7 @@ interface SevenFiveQuestionPanelProps {
   isSubmitted: boolean
   correctAnswers?: Record<number, string>
   onAskAI?: (question: string) => void
+  textMark?: ReturnType<typeof useTextMark>
 }
 
 // 每个选项独立的颜色
@@ -41,7 +43,11 @@ export default function SevenFiveQuestionPanel({
   isSubmitted,
   correctAnswers,
   onAskAI,
+  textMark,
 }: SevenFiveQuestionPanelProps) {
+  const [errorMsg, setErrorMsg] = useState('')
+  const containerRef = useRef<HTMLDivElement>(null)
+  
   const currentBlank = blanks[currentIndex]
   const currentAnswer = currentBlank ? answers[currentBlank] : null
   
@@ -52,16 +58,81 @@ export default function SevenFiveQuestionPanel({
     )
   }
   
+  // 获取选项被哪个空位使用
+  const getOptionUsedBy = (optionKey: string, excludeBlank?: number): number | null => {
+    for (const [blank, ans] of Object.entries(answers)) {
+      if (ans === optionKey && parseInt(blank) !== excludeBlank) {
+        return parseInt(blank)
+      }
+    }
+    return null
+  }
+  
   // 选择选项
   const handleSelectOption = (optionKey: string) => {
     if (isSubmitted || !currentBlank) return
+    
+    // 标记模式下不选择选项
+    if (textMark?.isMarkMode) return
+    
+    // 检查该选项是否已被其他空位使用
+    const usedBy = getOptionUsedBy(optionKey, currentBlank)
+    if (usedBy) {
+      setErrorMsg(`选项 ${optionKey} 已被第 ${usedBy - 40} 空选择，请先清除该空位的选择`)
+      setTimeout(() => setErrorMsg(''), 3000)
+      return
+    }
+    
     onAnswer(currentBlank, optionKey)
+    setErrorMsg('')
+    
+    // 自动跳转到下一个空位
+    if (currentIndex < blanks.length - 1) {
+      setTimeout(() => onNavigate(currentIndex + 1), 100)
+    }
+  }
+  
+  // 处理选项文本选择（标记模式）
+  const handleOptionMouseUp = (optionKey: string, e: React.MouseEvent) => {
+    if (!textMark?.isMarkMode || isSubmitted) return
+    
+    const selection = window.getSelection()
+    if (!selection || selection.isCollapsed) return
+    
+    const selectedText = selection.toString().trim()
+    if (!selectedText) return
+    
+    const range = selection.getRangeAt(0)
+    const container = e.currentTarget
+    
+    // 获取选中文本在容器内的位置
+    const preSelectionRange = document.createRange()
+    preSelectionRange.selectNodeContents(container)
+    preSelectionRange.setEnd(range.startContainer, range.startOffset)
+    const start = preSelectionRange.toString().length
+    
+    const end = start + selectedText.length
+    
+    textMark.addMark('option', selectedText, start, end, optionKey)
+    selection.removeAllRanges()
+  }
+  
+  // 点击标记删除
+  const handleMarkClick = (mark: TextMark, e: React.MouseEvent) => {
+    e.stopPropagation()
+    textMark?.removeMark(mark.id)
+  }
+  
+  // 清除当前选项标记
+  const clearOptionMarks = (optionKey: string) => {
+    textMark?.clearRegionMarks('option', optionKey)
   }
   
   // 清除当前选择
   const handleClearAnswer = () => {
     if (isSubmitted || !currentBlank) return
     onClearAnswer(currentBlank)
+    setErrorMsg('')
   }
   
   // 计算统计
@@ -69,6 +140,70 @@ export default function SevenFiveQuestionPanel({
   const correctCount = isSubmitted && correctAnswers
     ? blanks.filter(b => answers[b] === correctAnswers[b]).length 
     : 0
+  
+  // 检查是否有重复选择
+  const hasDuplicates = () => {
+    const selectedOptions = Object.values(answers)
+    return selectedOptions.length !== new Set(selectedOptions).size
+  }
+  
+  // 提交前检查
+  const handleSubmit = () => {
+    if (hasDuplicates()) {
+      setErrorMsg('存在重复选择，请确保每个选项只被一个空位选择')
+      setTimeout(() => setErrorMsg(''), 3000)
+      return
+    }
+    if (answeredCount !== 5) {
+      setErrorMsg(`请完成所有5个空位的选择，当前已完成 ${answeredCount} 个`)
+      setTimeout(() => setErrorMsg(''), 3000)
+      return
+    }
+    setErrorMsg('')
+    onSubmit()
+  }
+  
+  // 渲染带标记的选项内容
+  const renderMarkedContent = (optionKey: string, content: string) => {
+    if (!textMark) return <span>{content}</span>
+    
+    const optionMarks = textMark.getMarks('option', optionKey)
+    if (optionMarks.length === 0) {
+      return <span>{content}</span>
+    }
+    
+    const elements: React.ReactNode[] = []
+    let lastIndex = 0
+    
+    optionMarks.forEach((mark, i) => {
+      // 未标记部分
+      if (mark.start > lastIndex) {
+        elements.push(
+          <span key={`text-${i}`}>{content.slice(lastIndex, mark.start)}</span>
+        )
+      }
+      // 标记部分
+      elements.push(
+        <span
+          key={`mark-${mark.id}`}
+          className="cursor-pointer rounded px-0.5"
+          style={{ background: MARK_COLOR }}
+          onClick={(e) => handleMarkClick(mark, e)}
+          title="点击删除标记"
+        >
+          {content.slice(mark.start, mark.end)}
+        </span>
+      )
+      lastIndex = mark.end
+    })
+    
+    // 剩余部分
+    if (lastIndex < content.length) {
+      elements.push(<span key="text-end">{content.slice(lastIndex)}</span>)
+    }
+    
+    return elements
+  }
   
   return (
     <div className="h-full flex flex-col bg-slate-50" style={{ minHeight: 0 }}>
@@ -137,30 +272,32 @@ export default function SevenFiveQuestionPanel({
       </div>
       
       {/* 选项列表 A-G */}
-      <div className="flex-1 overflow-y-auto p-3" style={{ minHeight: 0 }}>
+      <div className="flex-1 overflow-y-auto p-3" style={{ minHeight: 0 }} ref={containerRef}>
         <div className="text-xs uppercase tracking-wider mb-3 text-slate-400">段落选项 (A-G)</div>
         <div className="space-y-2">
           {options.sort((a, b) => a.key.localeCompare(b.key)).map(opt => {
-            const isUsed = isOptionUsed(opt.key, currentBlank)
+            const usedBy = getOptionUsedBy(opt.key, currentBlank)
             const isSelected = currentAnswer === opt.key
             const colorStyle = OPTION_COLORS[opt.key]
             const isCorrectOption = isSubmitted && correctAnswers && currentBlank && correctAnswers[currentBlank] === opt.key
+            const optionMarkCount = textMark?.getMarkCount('option', opt.key) || 0
             
             return (
-              <button
+              <div
                 key={opt.key}
-                className="w-full text-left p-3 rounded-xl transition-all border-2"
+                className="w-full text-left p-3 rounded-xl transition-all border-2 relative"
                 style={{
                   background: isSubmitted 
                     ? (isCorrectOption ? '#d1fae5' : isSelected ? colorStyle?.bg : '#ffffff')
-                    : isSelected ? colorStyle?.bg : isUsed ? '#f3f4f6' : '#ffffff',
+                    : isSelected ? colorStyle?.bg : usedBy ? '#f3f4f6' : '#ffffff',
                   borderColor: isSubmitted 
                     ? (isCorrectOption ? '#10b981' : isSelected ? colorStyle?.border : '#e5e7eb')
-                    : isSelected ? colorStyle?.border : isUsed ? '#d1d5db' : '#e5e7eb',
-                  opacity: isUsed && !isSelected ? 0.5 : 1,
+                    : isSelected ? colorStyle?.border : usedBy ? '#d1d5db' : '#e5e7eb',
+                  opacity: usedBy && !isSelected ? 0.6 : 1,
+                  cursor: textMark?.isMarkMode ? 'text' : 'pointer',
                 }}
-                onClick={() => !isSubmitted && !isUsed && handleSelectOption(opt.key)}
-                disabled={isSubmitted || (isUsed && !isSelected)}
+                onClick={() => !isSubmitted && !textMark?.isMarkMode && handleSelectOption(opt.key)}
+                onMouseUp={(e) => handleOptionMouseUp(opt.key, e)}
               >
                 <div className="flex items-start gap-2">
                   <span 
@@ -170,16 +307,31 @@ export default function SevenFiveQuestionPanel({
                     {opt.key}
                   </span>
                   <span 
-                    className="text-sm leading-relaxed"
+                    className="text-sm leading-relaxed flex-1"
                     style={{ color: isSelected || isCorrectOption ? colorStyle?.text : '#374151' }}
                   >
-                    {opt.content.length > 150 ? opt.content.slice(0, 150) + '...' : opt.content}
+                    {renderMarkedContent(opt.key, opt.content.length > 150 ? opt.content.slice(0, 150) + '...' : opt.content)}
                   </span>
+                  {/* 标记数量 */}
+                  {optionMarkCount > 0 && !isSubmitted && (
+                    <span 
+                      className="text-xs px-1.5 py-0.5 rounded-full bg-yellow-100 text-yellow-700 cursor-pointer hover:bg-yellow-200"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        clearOptionMarks(opt.key)
+                      }}
+                      title="点击清除标记"
+                    >
+                      {optionMarkCount} 标记
+                    </span>
+                  )}
                 </div>
-                {isUsed && !isSelected && !isSubmitted && (
-                  <div className="text-xs mt-1 text-slate-400 ml-8">已被其他空位选择</div>
+                {usedBy && !isSelected && !isSubmitted && (
+                  <div className="text-xs mt-1 text-amber-600 ml-8">
+                    已被第 {usedBy - 40} 空选择
+                  </div>
                 )}
-              </button>
+              </div>
             )
           })}
         </div>
@@ -187,12 +339,17 @@ export default function SevenFiveQuestionPanel({
       
       {/* 提交按钮 */}
       <div className="p-3 border-t bg-white flex-shrink-0">
+        {errorMsg && (
+          <div className="mb-2 p-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600">
+            {errorMsg}
+          </div>
+        )}
         {!isSubmitted ? (
           <>
             {answeredCount === 5 ? (
               <Button
                 className="w-full bg-emerald-500 hover:bg-emerald-600"
-                onClick={onSubmit}
+                onClick={handleSubmit}
               >
                 提交答案
               </Button>

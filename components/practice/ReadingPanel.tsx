@@ -13,6 +13,7 @@ import {
   BookPlus,
   X
 } from 'lucide-react'
+import { useTextMark, MARK_COLOR, TextMark } from '@/hooks/useTextMark'
 
 interface ReadingPanelProps {
   content: string
@@ -34,6 +35,7 @@ interface ReadingPanelProps {
   isTranslating?: boolean
   articleId?: string
   isSubmitted?: boolean
+  textMark?: ReturnType<typeof useTextMark>
 }
 
 // 4种护眼柔和颜色
@@ -66,6 +68,7 @@ export default function ReadingPanel({
   isTranslating,
   articleId,
   isSubmitted = false,
+  textMark,
 }: ReadingPanelProps) {
   const [activeColor, setActiveColor] = useState<string>('red')
   const [hoveredHighlight, setHoveredHighlight] = useState<string | null>(null)
@@ -83,6 +86,38 @@ export default function ReadingPanel({
   const [isLoadingMeaning, setIsLoadingMeaning] = useState(false)
   const [popupPosition, setPopupPosition] = useState({ x: 0, y: 0 })
   const [addedWords, setAddedWords] = useState<Set<string>>(new Set())
+  
+  // 处理文章区域的文本选择（标记模式）
+  const handleArticleMouseUp = useCallback((e: React.MouseEvent) => {
+    if (!textMark?.isMarkMode) return
+    
+    const selection = window.getSelection()
+    if (!selection || selection.isCollapsed) return
+    
+    const selectedText = selection.toString().trim()
+    if (!selectedText) return
+    
+    const range = selection.getRangeAt(0)
+    const container = contentRef.current
+    if (!container) return
+    
+    // 获取选中文本在容器内的位置
+    const preSelectionRange = document.createRange()
+    preSelectionRange.selectNodeContents(container)
+    preSelectionRange.setEnd(range.startContainer, range.startOffset)
+    const start = preSelectionRange.toString().length
+    
+    const end = start + selectedText.length
+    
+    textMark.addMark('article', selectedText, start, end)
+    selection.removeAllRanges()
+  }, [textMark])
+  
+  // 点击文章中的标记删除
+  const handleArticleMarkClick = useCallback((mark: TextMark, e: React.MouseEvent) => {
+    e.stopPropagation()
+    textMark?.removeMark(mark.id)
+  }, [textMark])
   
   // 生词缓存（预加载后存储）
   const [wordCache, setWordCache] = useState<Record<string, { meaning: string; phonetic?: string; pos?: string }>>({})
@@ -239,12 +274,69 @@ export default function ReadingPanel({
     return COLORS.find(c => c.id === colorId) || COLORS[0]
   }
 
+  // 渲染带 textMark 标记的文本
+  const renderTextMarkedText = (text: string, globalOffset: number) => {
+    if (!textMark) return <span>{text}</span>
+    
+    const articleMarks = textMark.getMarks('article')
+    if (articleMarks.length === 0) return <span>{text}</span>
+    
+    // 找出当前文本范围内的标记
+    const textStart = globalOffset
+    const textEnd = globalOffset + text.length
+    
+    const relevantMarks = articleMarks.filter(m => 
+      m.start < textEnd && m.end > textStart
+    )
+    
+    if (relevantMarks.length === 0) return <span>{text}</span>
+    
+    const elements: React.ReactNode[] = []
+    let lastIndex = 0
+    
+    relevantMarks.forEach((mark, i) => {
+      const markStart = Math.max(0, mark.start - textStart)
+      const markEnd = Math.min(text.length, mark.end - textStart)
+      
+      // 未标记部分
+      if (markStart > lastIndex) {
+        elements.push(
+          <span key={`tm-text-${i}`}>{text.slice(lastIndex, markStart)}</span>
+        )
+      }
+      // 标记部分
+      elements.push(
+        <span
+          key={`tm-mark-${mark.id}`}
+          className="cursor-pointer rounded px-0.5"
+          style={{ background: MARK_COLOR }}
+          onClick={(e) => handleArticleMarkClick(mark, e)}
+          title="点击删除标记"
+        >
+          {text.slice(markStart, markEnd)}
+        </span>
+      )
+      lastIndex = markEnd
+    })
+    
+    // 剩余部分
+    if (lastIndex < text.length) {
+      elements.push(<span key="tm-text-end">{text.slice(lastIndex)}</span>)
+    }
+    
+    return elements
+  }
+
   // 渲染带高亮的文章内容
   const renderContent = () => {
     const paragraphs = content.split('\n\n')
+    let globalOffset = 0 // 全局字符偏移
     
     return paragraphs.map((paragraph, pIndex) => {
       const highlightsInParagraph = highlights.filter(h => paragraph.includes(h.text))
+      
+      // 计算下一段的偏移量
+      const nextOffset = globalOffset + paragraph.length + 2 // +2 for '\n\n'
       
       if (highlightsInParagraph.length > 0) {
         const elements: React.ReactNode[] = []
@@ -256,9 +348,11 @@ export default function ReadingPanel({
         sortedHighlights.forEach((h, hIndex) => {
           const index = paragraph.indexOf(h.text, lastIndex)
           if (index > lastIndex) {
+            // 未高亮部分（可能有 textMark 标记）
+            const textBefore = paragraph.slice(lastIndex, index)
             elements.push(
               <span key={`text-${pIndex}-${hIndex}`}>
-                {paragraph.slice(lastIndex, index)}
+                {renderTextMarkedText(textBefore, globalOffset + lastIndex)}
               </span>
             )
           }
@@ -291,12 +385,16 @@ export default function ReadingPanel({
         })
         
         if (lastIndex < paragraph.length) {
+          // 剩余未高亮部分（可能有 textMark 标记）
+          const textAfter = paragraph.slice(lastIndex)
           elements.push(
             <span key={`text-end-${pIndex}`}>
-              {paragraph.slice(lastIndex)}
+              {renderTextMarkedText(textAfter, globalOffset + lastIndex)}
             </span>
           )
         }
+        
+        globalOffset = nextOffset
         
         return (
           <p key={pIndex} className="mb-6 leading-loose text-[17px]">
@@ -305,11 +403,16 @@ export default function ReadingPanel({
         )
       }
       
-      return (
+      // 没有高亮的段落，检查是否有 textMark 标记
+      const result = (
         <p key={pIndex} className="mb-6 leading-loose text-[17px]">
-          {paragraph}
+          {renderTextMarkedText(paragraph, globalOffset)}
         </p>
       )
+      
+      globalOffset = nextOffset
+      
+      return result
     })
   }
 
@@ -482,14 +585,15 @@ export default function ReadingPanel({
           overflowY: 'auto',
           background: eyeCareMode 
             ? 'linear-gradient(180deg, #F1F8E9 0%, #FFFDE7 100%)'
-            : '#ffffff'
+            : '#ffffff',
+          cursor: textMark?.isMarkMode ? 'text' : undefined
         }}
         ref={contentRef}
+        onMouseUp={textMark?.isMarkMode ? handleArticleMouseUp : handleMouseUp}
       >
         <div
-          className={`prose prose-sm max-w-none select-text ${isMarkingMode ? 'cursor-crosshair' : 'cursor-text'}`}
+          className={`prose prose-sm max-w-none select-text ${isMarkingMode && !textMark?.isMarkMode ? 'cursor-crosshair' : 'cursor-text'}`}
           style={{ color: eyeCareMode ? '#33691E' : '#374151' }}
-          onMouseUp={handleMouseUp}
           onDoubleClick={(e) => {
             const selection = window.getSelection()
             const word = selection?.toString().trim()
