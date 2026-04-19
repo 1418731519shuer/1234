@@ -753,7 +753,7 @@ export default function WritingPanel({
           </div>
           <div 
             className="flex-1 p-6 overflow-y-auto"
-            style={{ background: eyeCareMode ? 'rgba(255,255,255,0.9)' : '#fafafa' }}
+            style={{ background: eyeCareMode ? 'rgba(255,255,255,0.9)' : '#fafafa', whiteSpace: 'pre-wrap' }}
           >
             {parsedLines.length === 0 ? (
               <div className="text-gray-400 text-center py-8">
