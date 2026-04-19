@@ -467,123 +467,126 @@ export default function TranslationPanel({
         </div>
       </div>
       
-      {/* 全文翻译内容 */}
-      {showFullTranslation && translationSentences.length > 0 && (
+      {/* 全文翻译内容 - 占满整栏 */}
+      {showFullTranslation && translationSentences.length > 0 ? (
         <div 
-          className="p-4 border-b flex-shrink-0 overflow-y-auto"
+          className="p-6 overflow-y-auto"
           style={{ 
+            flex: '1 1 0%',
+            minHeight: 0,
             background: eyeCareMode ? '#E8F5E9' : '#f0f9ff',
-            borderColor: eyeCareMode ? '#A5D6A7' : '#bfdbfe',
-            maxHeight: '280px'
           }}
         >
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm font-medium" style={{ color: eyeCareMode ? '#2E7D32' : '#1e40af' }}>
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-base font-medium" style={{ color: eyeCareMode ? '#2E7D32' : '#1e40af' }}>
               全文翻译（逐句对照）
             </span>
             <button
-              className="text-xs text-slate-400 hover:text-slate-600"
+              className="text-xs text-slate-400 hover:text-slate-600 px-2 py-1 rounded border border-slate-200"
               onClick={() => setShowFullTranslation(false)}
             >
-              收起
+              返回原文
             </button>
           </div>
-          <div className="space-y-3">
+          <div className="space-y-4">
             {translationSentences.map((sentence, i) => (
               <div 
                 key={i} 
-                className="p-3 rounded-lg bg-amber-50/50 border border-amber-100"
-                style={eyeCareMode ? { background: 'rgba(255,255,255,0.6)', borderColor: '#A5D6A7' } : {}}
+                className="p-4 rounded-lg border"
+                style={eyeCareMode 
+                  ? { background: 'rgba(255,255,255,0.7)', borderColor: '#A5D6A7' } 
+                  : { background: 'rgba(255,255,255,0.5)', borderColor: '#bfdbfe' }
+                }
               >
-                <p className="text-sm text-gray-600 leading-relaxed mb-2">{sentence.english}</p>
-                <p className="text-[15px] leading-relaxed" style={{ color: eyeCareMode ? '#33691E' : '#374151' }}>
+                <p className="text-sm text-gray-500 leading-relaxed mb-2">{sentence.english}</p>
+                <p className="text-[15px] leading-relaxed font-medium" style={{ color: eyeCareMode ? '#33691E' : '#374151' }}>
                   {sentence.chinese}
                 </p>
               </div>
             ))}
           </div>
         </div>
-      )}
-      
-      {/* 文章内容 */}
-      <div 
-        className="relative p-6"
-        style={{ 
-          flex: '1 1 0%', 
-          minHeight: 0, 
-          overflowY: 'auto',
-          background: eyeCareMode 
-            ? 'linear-gradient(180deg, #F1F8E9 0%, #FFFDE7 100%)'
-            : '#ffffff',
-          cursor: textMark?.isMarkMode ? 'text' : 'default'
-        }}
-        ref={contentRef}
-        onMouseUp={handleArticleMouseUp}
-      >
-        <div
-          className="prose prose-sm max-w-none select-text"
-          style={{ color: eyeCareMode ? '#33691E' : '#374151' }}
-          onDoubleClick={(e) => {
-            const selection = window.getSelection()
-            const word = selection?.toString().trim()
-            if (word && isSubmitted) {
-              handleWordClick(word, e)
-            }
+      ) : (
+        /* 文章内容 */
+        <div 
+          className="relative p-6"
+          style={{ 
+            flex: '1 1 0%', 
+            minHeight: 0, 
+            overflowY: 'auto',
+            background: eyeCareMode 
+              ? 'linear-gradient(180deg, #F1F8E9 0%, #FFFDE7 100%)'
+              : '#ffffff',
+            cursor: textMark?.isMarkMode ? 'text' : 'default'
           }}
+          ref={contentRef}
+          onMouseUp={handleArticleMouseUp}
         >
-          {renderContent()}
-        </div>
-        
-        {/* 生词弹窗 */}
-        {selectedWord && isSubmitted && (
-          <div 
-            className="fixed z-50 bg-white rounded-lg shadow-xl border border-gray-200 p-4 w-72 max-h-80"
-            style={{ 
-              left: Math.min(popupPosition.x, window.innerWidth - 300),
-              top: Math.min(popupPosition.y, window.innerHeight - 350)
+          <div
+            className="prose prose-sm max-w-none select-text"
+            style={{ color: eyeCareMode ? '#33691E' : '#374151' }}
+            onDoubleClick={(e) => {
+              const selection = window.getSelection()
+              const word = selection?.toString().trim()
+              if (word && isSubmitted) {
+                handleWordClick(word, e)
+              }
             }}
           >
-            <div className="flex items-center justify-between mb-2">
-              <div>
-                <span className="font-bold text-lg text-gray-900">{selectedWord}</span>
-                {wordPhonetic && <span className="ml-2 text-sm text-gray-500">/{wordPhonetic}/</span>}
-              </div>
-              <button onClick={() => setSelectedWord(null)} className="text-gray-400 hover:text-gray-600">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            {wordPos && (
-              <div className="mb-2">
-                <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">{wordPos}</span>
-              </div>
-            )}
-            {isLoadingMeaning ? (
-              <div className="flex items-center gap-2 text-gray-500">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>查询中...</span>
-              </div>
-            ) : (
-              <>
-                <div className="text-sm text-gray-700 mb-3 leading-relaxed max-h-40 overflow-y-auto">
-                  {wordMeaning.split('\\n').map((line, i) => (
-                    <div key={i} className="mb-1">{line}</div>
-                  ))}
-                </div>
-                <Button 
-                  size="sm" 
-                  onClick={addToVocabulary}
-                  disabled={addedWords.has(selectedWord)}
-                  className="w-full"
-                  variant={addedWords.has(selectedWord) ? "secondary" : "default"}
-                >
-                  <BookPlus className="w-4 h-4 mr-1" />
-                  {addedWords.has(selectedWord) ? '已收藏' : '收藏到生词本'}
-                </Button>
-              </>
-            )}
+            {renderContent()}
           </div>
-        )}
-      </div>
+          
+          {/* 生词弹窗 */}
+          {selectedWord && isSubmitted && (
+            <div 
+              className="fixed z-50 bg-white rounded-lg shadow-xl border border-gray-200 p-4 w-72 max-h-80"
+              style={{ 
+                left: Math.min(popupPosition.x, window.innerWidth - 300),
+                top: Math.min(popupPosition.y, window.innerHeight - 350)
+              }}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <span className="font-bold text-lg text-gray-900">{selectedWord}</span>
+                  {wordPhonetic && <span className="ml-2 text-sm text-gray-500">/{wordPhonetic}/</span>}
+                </div>
+                <button onClick={() => setSelectedWord(null)} className="text-gray-400 hover:text-gray-600">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              {wordPos && (
+                <div className="mb-2">
+                  <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">{wordPos}</span>
+                </div>
+              )}
+              {isLoadingMeaning ? (
+                <div className="flex items-center gap-2 text-gray-500">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>查询中...</span>
+                </div>
+              ) : (
+                <>
+                  <div className="text-sm text-gray-700 mb-3 leading-relaxed max-h-40 overflow-y-auto">
+                    {wordMeaning.split('\\n').map((line, i) => (
+                      <div key={i} className="mb-1">{line}</div>
+                    ))}
+                  </div>
+                  <Button 
+                    size="sm" 
+                    onClick={addToVocabulary}
+                    disabled={addedWords.has(selectedWord)}
+                    className="w-full"
+                    variant={addedWords.has(selectedWord) ? "secondary" : "default"}
+                  >
+                    <BookPlus className="w-4 h-4 mr-1" />
+                    {addedWords.has(selectedWord) ? '已收藏' : '收藏到生词本'}
+                  </Button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
       
       {/* 底部句子导航 */}
       <div 
