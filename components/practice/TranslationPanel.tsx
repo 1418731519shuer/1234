@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Sun, Moon, BookPlus, X, Loader2, Pencil } from 'lucide-react'
+import { Sun, Moon, BookPlus, X, Loader2, Languages, ChevronUp, ChevronDown } from 'lucide-react'
 import { useTextMark, MARK_COLORS, TextMark, MarkColorType } from '@/hooks/useTextMark'
 
 interface TranslationSentence {
@@ -24,14 +24,16 @@ interface TranslationSentence {
 }
 
 interface TranslationPanelProps {
-  content: string           // 完整文章
+  content: string
   title: string
-  sentences: TranslationSentence[]  // 划线句子
+  sentences: TranslationSentence[]
   currentIndex: number
   onSelectSentence: (index: number) => void
   isSubmitted: boolean
   textMark?: ReturnType<typeof useTextMark>
   onAskAI?: (question: string) => void
+  articleId?: string
+  savedTranslation?: string  // 已保存的翻译
 }
 
 export default function TranslationPanel({
@@ -43,9 +45,16 @@ export default function TranslationPanel({
   isSubmitted,
   textMark,
   onAskAI,
+  articleId,
+  savedTranslation,
 }: TranslationPanelProps) {
   const [eyeCareMode, setEyeCareMode] = useState(true)
   const contentRef = useRef<HTMLDivElement>(null)
+  
+  // 全文翻译
+  const [showFullTranslation, setShowFullTranslation] = useState(false)
+  const [fullTranslation, setFullTranslation] = useState<string>(savedTranslation || '')
+  const [isTranslating, setIsTranslating] = useState(false)
   
   // 生词功能
   const [selectedWord, setSelectedWord] = useState<string | null>(null)
@@ -55,6 +64,51 @@ export default function TranslationPanel({
   const [isLoadingMeaning, setIsLoadingMeaning] = useState(false)
   const [popupPosition, setPopupPosition] = useState({ x: 0, y: 0 })
   const [addedWords, setAddedWords] = useState<Set<string>>(new Set())
+  
+  // 同步已保存的翻译
+  useEffect(() => {
+    if (savedTranslation) {
+      setFullTranslation(savedTranslation)
+    }
+  }, [savedTranslation])
+  
+  // 全文翻译
+  const handleFullTranslation = async () => {
+    if (fullTranslation) {
+      setShowFullTranslation(!showFullTranslation)
+      return
+    }
+    
+    if (!articleId || !content) return
+    
+    setIsTranslating(true)
+    try {
+      const response = await fetch('/api/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          articleId,
+          content: content.slice(0, 5000), // 限制长度
+        }),
+      })
+      const data = await response.json()
+      
+      if (data.sentences && Array.isArray(data.sentences)) {
+        const translationText = data.sentences
+          .map((s: any) => `${s.english}\n${s.chinese}`)
+          .join('\n\n')
+        setFullTranslation(translationText)
+      } else if (data.translation) {
+        setFullTranslation(data.translation)
+      }
+      
+      setShowFullTranslation(true)
+    } catch (error) {
+      console.error('Translation error:', error)
+    } finally {
+      setIsTranslating(false)
+    }
+  }
   
   // 处理文章区域的文本选择（标记模式）
   const handleArticleMouseUp = useCallback((e: React.MouseEvent) => {
@@ -201,7 +255,6 @@ export default function TranslationPanel({
     sentencePositions.sort((a, b) => a.start - b.start)
     
     const elements: React.ReactNode[] = []
-    let lastIndex = 0
     let globalOffset = 0
     
     // 处理段落
@@ -288,7 +341,7 @@ export default function TranslationPanel({
         )
       }
       
-      globalOffset = paragraphEnd + 2 // +2 for '\n\n'
+      globalOffset = paragraphEnd + 2
     })
     
     return elements
@@ -324,21 +377,43 @@ export default function TranslationPanel({
           >
             {title}
           </h2>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setEyeCareMode(!eyeCareMode)}
-            style={{ background: eyeCareMode ? 'rgba(255,255,255,0.5)' : 'transparent' }}
-          >
-            {eyeCareMode ? (
-              <div className="flex items-center gap-1">
-                <span className="text-xs">护眼</span>
-                <Sun className="w-4 h-4 text-amber-600" />
-              </div>
-            ) : (
-              <Moon className="w-4 h-4 text-gray-500" />
+          <div className="flex items-center gap-2">
+            {/* 全文翻译按钮 */}
+            {isSubmitted && (
+              <Button
+                variant={showFullTranslation ? "default" : "outline"}
+                size="sm"
+                onClick={handleFullTranslation}
+                disabled={isTranslating}
+                style={eyeCareMode ? { 
+                  borderColor: '#81C784',
+                  background: showFullTranslation ? '#66BB6A' : 'rgba(255,255,255,0.7)'
+                } : {}}
+              >
+                {isTranslating ? (
+                  <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                ) : (
+                  <Languages className="w-4 h-4 mr-1" />
+                )}
+                {fullTranslation ? (showFullTranslation ? '隐藏翻译' : '全文翻译') : '全文翻译'}
+              </Button>
             )}
-          </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setEyeCareMode(!eyeCareMode)}
+              style={{ background: eyeCareMode ? 'rgba(255,255,255,0.5)' : 'transparent' }}
+            >
+              {eyeCareMode ? (
+                <div className="flex items-center gap-1">
+                  <span className="text-xs">护眼</span>
+                  <Sun className="w-4 h-4 text-amber-600" />
+                </div>
+              ) : (
+                <Moon className="w-4 h-4 text-gray-500" />
+              )}
+            </Button>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <Badge 
@@ -359,6 +434,32 @@ export default function TranslationPanel({
           </span>
         </div>
       </div>
+      
+      {/* 全文翻译内容 */}
+      {showFullTranslation && fullTranslation && (
+        <div 
+          className="p-4 border-b flex-shrink-0 max-h-[40%] overflow-y-auto"
+          style={{ 
+            background: eyeCareMode ? '#E8F5E9' : '#f0f9ff',
+            borderColor: eyeCareMode ? '#A5D6A7' : '#bfdbfe'
+          }}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium" style={{ color: eyeCareMode ? '#2E7D32' : '#1e40af' }}>
+              全文翻译
+            </span>
+            <button
+              className="text-xs text-slate-400 hover:text-slate-600"
+              onClick={() => setShowFullTranslation(false)}
+            >
+              收起
+            </button>
+          </div>
+          <div className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: eyeCareMode ? '#33691E' : '#374151' }}>
+            {fullTranslation}
+          </div>
+        </div>
+      )}
       
       {/* 文章内容 */}
       <div 

@@ -9,6 +9,16 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Home, Loader2 } from 'lucide-react'
 
+interface WritingScore {
+  content: number
+  language: number
+  structure: number
+  total: number
+  feedback: string
+  suggestions: string[]
+  grammarErrors: { text: string; correction: string; explanation: string }[]
+}
+
 interface WritingTask {
   id: string
   taskType: 'small' | 'big'
@@ -52,6 +62,8 @@ export default function WritingPracticePage({ params }: { params: Promise<{ id: 
   const [startTime] = useState(new Date())
   const [practiceId, setPracticeId] = useState<string>('')
   const [aiQuestion, setAiQuestion] = useState<string>('')
+  const [aiScores, setAiScores] = useState<Record<string, WritingScore>>({})
+  const [isScoring, setIsScoring] = useState(false)
   
   useEffect(() => {
     const fetchArticle = async () => {
@@ -83,7 +95,93 @@ export default function WritingPracticePage({ params }: { params: Promise<{ id: 
     setUserAnswers(prev => ({ ...prev, [taskId]: answer }))
   }
   
-  const handleSubmit = async () => {
+  // AI 评分
+  const handleAIScore = async (taskId: string) => {
+    const task = tasks.find(t => t.id === taskId)
+    const answer = userAnswers[taskId]
+    if (!task || !answer) return
+    
+    const maxScore = task.taskType === 'small' ? 10 : 20
+    
+    try {
+      const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer sk-864e66eafdc648a6ba27607b1518f9bc`,
+        },
+        body: JSON.stringify({
+          model: 'deepseek-chat',
+          messages: [{
+            role: 'user',
+            content: `请对以下考研英语${task.taskType === 'small' ? '小作文' : '大作文'}进行评分，严格按照JSON格式返回：
+
+【题目要求】
+${task.description}
+${task.requirements.join('\n')}
+
+【学生作文】
+${answer}
+
+【满分】${maxScore}分
+
+请返回以下JSON格式（不要有其他内容）：
+{
+  "content": 3,
+  "language": 3,
+  "structure": 3,
+  "total": 9,
+  "feedback": "总体评价（50字以内）",
+  "suggestions": ["建议1", "建议2"],
+  "grammarErrors": [{"text": "错误句子", "correction": "正确句子", "explanation": "解释"}]
+}
+
+评分标准：
+- content (内容分): 内容是否完整、切题
+- language (语言分): 词汇、语法是否正确
+- structure (结构分): 段落组织是否合理
+- total: 总分（不超过满分${maxScore}）
+- feedback: 总体评价
+- suggestions: 改进建议数组
+- grammarErrors: 语法错误数组（最多3个）`
+          }],
+          temperature: 0.3,
+        }),
+      })
+      
+      const data = await response.json()
+      const content = data.choices?.[0]?.message?.content || ''
+      
+      let scoreData: WritingScore
+      try {
+        const jsonMatch = content.match(/\{[\s\S]*\}/)
+        if (jsonMatch) {
+          scoreData = JSON.parse(jsonMatch[0])
+        } else {
+          throw new Error('No JSON')
+        }
+      } catch {
+        scoreData = {
+          content: Math.floor(maxScore * 0.3),
+          language: Math.floor(maxScore * 0.3),
+          structure: Math.floor(maxScore * 0.3),
+          total: Math.floor(maxScore * 0.9),
+          feedback: content.slice(0, 100),
+          suggestions: [],
+          grammarErrors: []
+        }
+      }
+      
+      // 确保总分不超过满分
+      scoreData.total = Math.min(scoreData.total, maxScore)
+      
+      setAiScores(prev => ({ ...prev, [taskId]: scoreData }))
+    } catch (error) {
+      console.error('AI scoring error:', error)
+    }
+  }
+  
+  const handleSubmit = async (withAIScore: boolean) => {
     if (!article || !practiceId) return
     
     try {
@@ -98,6 +196,19 @@ export default function WritingPracticePage({ params }: { params: Promise<{ id: 
       })
       
       setIsSubmitted(true)
+      
+      // 如果选择AI评分，则批量评分
+      if (withAIScore) {
+        setIsScoring(true)
+        for (const task of tasks) {
+          if (userAnswers[task.id]?.trim()) {
+            await handleAIScore(task.id)
+            // 延迟避免API限流
+            await new Promise(resolve => setTimeout(resolve, 500))
+          }
+        }
+        setIsScoring(false)
+      }
     } catch (error) {
       console.error('Submit error:', error)
     }
@@ -130,7 +241,6 @@ export default function WritingPracticePage({ params }: { params: Promise<{ id: 
   }
   
   // 从文章内容解析写作任务
-  // 格式：文章内容中包含小作文和大作文的题目信息
   const tasks: WritingTask[] = article.questions.map((q, i) => ({
     id: q.id,
     taskType: q.questionNum === 1 ? 'small' as const : 'big' as const,
@@ -146,6 +256,7 @@ export default function WritingPracticePage({ params }: { params: Promise<{ id: 
   
   const currentTask = tasks[currentTaskIndex]
   const currentAnswer = currentTask ? userAnswers[currentTask.id] || '' : ''
+  const currentScore = currentTask ? aiScores[currentTask.id] : undefined
   
   return (
     <div className="min-h-screen bg-slate-50">
@@ -165,6 +276,12 @@ export default function WritingPracticePage({ params }: { params: Promise<{ id: 
             {isSubmitted && (
               <Badge className="bg-emerald-500 text-white text-sm">已完成</Badge>
             )}
+            {isScoring && (
+              <Badge className="bg-blue-500 text-white text-sm">
+                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                AI评分中
+              </Badge>
+            )}
           </div>
         </div>
       </div>
@@ -183,6 +300,8 @@ export default function WritingPracticePage({ params }: { params: Promise<{ id: 
               onAnswerChange={handleAnswerChange}
               isSubmitted={isSubmitted}
               onAskAI={handleAskAI}
+              aiScore={currentScore}
+              isScoring={isScoring}
             />
           )}
         </div>
@@ -200,6 +319,8 @@ export default function WritingPracticePage({ params }: { params: Promise<{ id: 
             isSubmitted={isSubmitted}
             userAnswers={userAnswers}
             onAskAI={handleAskAI}
+            aiScores={aiScores}
+            isScoring={isScoring}
           />
         </div>
         

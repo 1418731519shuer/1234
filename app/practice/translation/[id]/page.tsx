@@ -322,6 +322,8 @@ ${sentence.userAnswer}
             isSubmitted={isSubmitted}
             textMark={textMark}
             onAskAI={handleAskAI}
+            articleId={article.id}
+            savedTranslation={article.translation}
           />
         </div>
         
@@ -340,8 +342,6 @@ ${sentence.userAnswer}
             startTime={startTime}
             onAskAI={handleAskAI}
             onAIScore={handleAIScore}
-            articleContent={article.content}
-            articleId={article.id}
           />
         </div>
         

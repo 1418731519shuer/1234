@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
-import { Clock, Send, ChevronUp, ChevronDown, MessageCircle, CheckCircle2, Loader2, AlertCircle, Languages, RotateCcw } from 'lucide-react'
+import { Clock, Send, ChevronUp, ChevronDown, MessageCircle, CheckCircle2, Loader2, AlertCircle } from 'lucide-react'
 
 interface TranslationSentence {
   id: string
@@ -35,8 +35,6 @@ interface TranslationQuestionPanelProps {
   startTime: Date
   onAskAI?: (question: string) => void
   onAIScore?: (sentenceId: string, score: TranslationSentence['aiScore']) => void
-  articleContent?: string
-  articleId?: string
 }
 
 export default function TranslationQuestionPanel({
@@ -49,15 +47,10 @@ export default function TranslationQuestionPanel({
   startTime,
   onAskAI,
   onAIScore,
-  articleContent,
-  articleId,
 }: TranslationQuestionPanelProps) {
   const [elapsedTime, setElapsedTime] = useState(0)
   const [isScoring, setIsScoring] = useState(false)
   const [showKeyVocab, setShowKeyVocab] = useState(true)
-  const [showFullTranslation, setShowFullTranslation] = useState(false)
-  const [fullTranslation, setFullTranslation] = useState<string>('')
-  const [isTranslating, setIsTranslating] = useState(false)
   
   const currentSentence = sentences[currentIndex]
   const answeredCount = sentences.filter(s => s.userAnswer && s.userAnswer.trim()).length
@@ -89,50 +82,17 @@ export default function TranslationQuestionPanel({
   
   const keyVocabList = parseKeyVocabulary(currentSentence.keyVocabulary)
   
-  // 全文翻译
-  const handleFullTranslation = async () => {
-    if (!articleContent || !articleId) return
-    
-    setIsTranslating(true)
-    try {
-      const response = await fetch('/api/translate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          articleId,
-          content: articleContent,
-        }),
-      })
-      const data = await response.json()
-      
-      if (data.sentences && Array.isArray(data.sentences)) {
-        // 逐句翻译格式
-        const translationText = data.sentences
-          .map((s: any) => `${s.english}\n${s.chinese}`)
-          .join('\n\n')
-        setFullTranslation(translationText)
-      } else if (data.translation) {
-        setFullTranslation(data.translation)
-      }
-    } catch (error) {
-      console.error('Translation error:', error)
-    } finally {
-      setIsTranslating(false)
-    }
-  }
-  
   // AI 评分
   const handleAIScore = async () => {
     if (!currentSentence.userAnswer || !onAIScore) return
     
     setIsScoring(true)
     try {
-      // 直接调用 DeepSeek API
       const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_DEEPSEEK_API_KEY || 'sk-864e66eafdc648a6ba27607b1518f9bc'}`,
+          'Authorization': `Bearer sk-864e66eafdc648a6ba27607b1518f9bc`,
         },
         body: JSON.stringify({
           model: 'deepseek-chat',
@@ -167,7 +127,6 @@ ${currentSentence.userAnswer}
       const data = await response.json()
       const content = data.choices?.[0]?.message?.content || ''
       
-      // 解析 JSON
       let scoreData
       try {
         const jsonMatch = content.match(/\{[\s\S]*\}/)
@@ -190,7 +149,6 @@ ${currentSentence.userAnswer}
       onAIScore(currentSentence.id, scoreData)
     } catch (error) {
       console.error('AI scoring error:', error)
-      // 默认评分
       onAIScore(currentSentence.id, {
         vocabScore: 0.5,
         fluencyScore: 0.5,
@@ -385,41 +343,6 @@ ${currentSentence.userAnswer}
             <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200">
               <p className="text-base text-emerald-900 leading-relaxed">{currentSentence.referenceCn}</p>
             </div>
-          </div>
-        )}
-        
-        {/* 全文翻译 */}
-        {isSubmitted && (
-          <div className="mb-4">
-            <button
-              className="flex items-center gap-2 text-xs font-medium text-blue-600 mb-2"
-              onClick={() => {
-                if (!showFullTranslation && !fullTranslation) {
-                  handleFullTranslation()
-                }
-                setShowFullTranslation(!showFullTranslation)
-              }}
-            >
-              <Languages className="w-4 h-4" />
-              <span>全文翻译</span>
-              {showFullTranslation ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-            </button>
-            {showFullTranslation && (
-              <div className="p-4 rounded-xl bg-blue-50 border border-blue-200">
-                {isTranslating ? (
-                  <div className="flex items-center gap-2 text-blue-600">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>翻译中...</span>
-                  </div>
-                ) : fullTranslation ? (
-                  <div className="text-sm text-blue-900 leading-relaxed whitespace-pre-wrap">
-                    {fullTranslation}
-                  </div>
-                ) : (
-                  <div className="text-sm text-blue-600">点击上方按钮获取全文翻译</div>
-                )}
-              </div>
-            )}
           </div>
         )}
         

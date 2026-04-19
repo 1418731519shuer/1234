@@ -2,7 +2,7 @@
 
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { FileText, Sparkles } from 'lucide-react'
+import { FileText, Sparkles, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react'
 
 interface WritingTask {
   id: string
@@ -13,14 +13,26 @@ interface WritingTask {
   wordCount: { min: number; max: number }
 }
 
+interface WritingScore {
+  content: number
+  language: number
+  structure: number
+  total: number
+  feedback: string
+  suggestions: string[]
+  grammarErrors: { text: string; correction: string; explanation: string }[]
+}
+
 interface WritingTaskPanelProps {
   tasks: WritingTask[]
   currentTaskIndex: number
   onSelectTask: (index: number) => void
-  onSubmit: () => void
+  onSubmit: (withAIScore: boolean) => void
   isSubmitted: boolean
   userAnswers: Record<string, string>
   onAskAI?: (question: string) => void
+  aiScores?: Record<string, WritingScore>
+  isScoring?: boolean
 }
 
 export default function WritingTaskPanel({
@@ -31,9 +43,20 @@ export default function WritingTaskPanel({
   isSubmitted,
   userAnswers,
   onAskAI,
+  aiScores,
+  isScoring,
 }: WritingTaskPanelProps) {
   const currentTask = tasks[currentTaskIndex]
   const answeredCount = Object.keys(userAnswers).filter(k => userAnswers[k]?.trim()).length
+  const allAnswered = answeredCount === tasks.length
+  
+  // 计算总分
+  const totalScore = aiScores 
+    ? Object.values(aiScores).reduce((sum, score) => sum + (score?.total || 0), 0)
+    : 0
+  const maxTotalScore = tasks.reduce((sum, task) => 
+    sum + (task.taskType === 'small' ? 10 : 20), 0
+  )
   
   return (
     <div className="h-full flex flex-col bg-slate-50" style={{ minHeight: 0 }}>
@@ -49,6 +72,7 @@ export default function WritingTaskPanel({
           {tasks.map((task, i) => {
             const hasAnswer = userAnswers[task.id]?.trim()
             const isCurrent = i === currentTaskIndex
+            const hasScore = aiScores?.[task.id]
             
             return (
               <button
@@ -57,14 +81,18 @@ export default function WritingTaskPanel({
                 style={{
                   background: isCurrent 
                     ? (task.taskType === 'small' ? '#dbeafe' : '#f3e8ff')
-                    : hasAnswer 
-                      ? '#d1fae5' 
-                      : '#f3f4f6',
+                    : hasScore
+                      ? '#d1fae5'
+                      : hasAnswer 
+                        ? '#fef3c7' 
+                        : '#f3f4f6',
                   borderColor: isCurrent 
                     ? (task.taskType === 'small' ? '#3b82f6' : '#a855f7')
-                    : hasAnswer 
-                      ? '#10b981' 
-                      : '#d1d5db',
+                    : hasScore
+                      ? '#10b981'
+                      : hasAnswer 
+                        ? '#f59e0b' 
+                        : '#d1d5db',
                   color: isCurrent 
                     ? (task.taskType === 'small' ? '#1e40af' : '#7c3aed')
                     : '#374151',
@@ -73,6 +101,11 @@ export default function WritingTaskPanel({
               >
                 <FileText className="w-4 h-4" />
                 {task.taskType === 'small' ? '小作文' : '大作文'}
+                {hasScore && (
+                  <span className="text-xs">
+                    {hasScore.total}分
+                  </span>
+                )}
               </button>
             )
           })}
@@ -132,38 +165,84 @@ export default function WritingTaskPanel({
                 )}
               </ul>
             </div>
+            
+            {/* 评分说明 */}
+            <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+              <div className="text-xs font-medium text-blue-700 mb-2">评分标准</div>
+              <div className="text-xs text-blue-600 space-y-1">
+                {currentTask.taskType === 'small' ? (
+                  <>
+                    <li>• 满分10分</li>
+                    <li>• 内容完整度 3-4分</li>
+                    <li>• 语言准确性 3-4分</li>
+                    <li>• 格式规范性 2-3分</li>
+                  </>
+                ) : (
+                  <>
+                    <li>• 满分20分</li>
+                    <li>• 内容与主题 6-8分</li>
+                    <li>• 语言表达 6-8分</li>
+                    <li>• 结构组织 4-6分</li>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
         )}
       </div>
       
       {/* 提交按钮 */}
       <div className="p-3 border-t bg-white flex-shrink-0">
-        {!isSubmitted ? (
-          <>
-            {answeredCount === tasks.length ? (
+        {isScoring ? (
+          <div className="flex items-center justify-center gap-2 text-blue-600 py-2">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span className="text-sm">AI评分中...</span>
+          </div>
+        ) : !isSubmitted ? (
+          <div className="space-y-2">
+            {/* 直接提交 */}
+            <Button
+              className="w-full bg-emerald-500 hover:bg-emerald-600"
+              disabled={!allAnswered}
+              onClick={() => onSubmit(false)}
+            >
+              {allAnswered ? '提交作文' : `请完成所有写作任务 (${answeredCount}/${tasks.length})`}
+            </Button>
+            
+            {/* AI评分提交 */}
+            {allAnswered && (
               <Button
-                className="w-full bg-emerald-500 hover:bg-emerald-600"
-                onClick={onSubmit}
+                variant="outline"
+                className="w-full text-blue-600 border-blue-200 hover:bg-blue-50"
+                onClick={() => onSubmit(true)}
               >
-                提交作文
+                <AlertCircle className="w-4 h-4 mr-1" />
+                提交并AI评分
               </Button>
-            ) : (
-              <div className="text-center text-sm text-slate-500">
-                请完成所有写作任务 ({answeredCount}/{tasks.length})
+            )}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {/* 总分显示 */}
+            {Object.keys(aiScores || {}).length === tasks.length && (
+              <div className="flex items-center justify-center gap-2 text-emerald-600 py-2">
+                <CheckCircle2 className="w-5 h-5" />
+                <span className="font-medium">总分: {totalScore}/{maxTotalScore}分</span>
               </div>
             )}
-          </>
-        ) : (
-          onAskAI && (
-            <Button
-              variant="outline"
-              className="w-full text-emerald-600 border-emerald-200 hover:bg-emerald-50"
-              onClick={() => onAskAI(`请帮我详细分析这篇作文的优缺点，并给出改进建议。`)}
-            >
-              <Sparkles className="w-4 h-4 mr-1" />
-              AI详细批改
-            </Button>
-          )
+            
+            {/* AI详细批改 */}
+            {onAskAI && (
+              <Button
+                variant="outline"
+                className="w-full text-emerald-600 border-emerald-200 hover:bg-emerald-50"
+                onClick={() => onAskAI(`请帮我详细分析这篇作文的优缺点，并给出改进建议。`)}
+              >
+                <Sparkles className="w-4 h-4 mr-1" />
+                AI详细批改
+              </Button>
+            )}
+          </div>
         )}
       </div>
     </div>
