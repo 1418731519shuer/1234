@@ -1,42 +1,42 @@
 'use client'
 
-import { useState, useRef, useCallback } from 'react'
-import { Badge } from '@/components/ui/badge'
+import { useState, useCallback, useRef } from 'react'
 import { Button } from '@/components/ui/button'
-import { Sun, Moon, MessageCircle } from 'lucide-react'
-import { TextMark } from '@/hooks/useTextMark'
+import { Badge } from '@/components/ui/badge'
+import { Sun, Moon, BookPlus, X, Loader2, Pencil } from 'lucide-react'
+import { useTextMark, MARK_COLORS, TextMark, MarkColorType } from '@/hooks/useTextMark'
 
 interface TranslationSentence {
   id: string
   sentenceNum: number
-  english: string
-  chinese?: string
+  englishText: string
+  referenceCn?: string
+  keyVocabulary?: string
+  grammarPoints?: string
+  scoringRules?: string
   userAnswer?: string
-  analysis?: string
-}
-
-interface TextMarkHook {
-  isMarkMode: boolean
-  setIsMarkMode: (v: boolean) => void
-  marks: TextMark[]
-  addMark: (region: 'article' | 'option', text: string, start: number, end: number, optionKey?: string) => void
-  removeMark: (id: string) => void
-  clearRegionMarks: (region: 'article' | 'option', optionKey?: string) => void
-  clearAllMarks: () => void
-  getMarks: (region: 'article' | 'option', optionKey?: string) => TextMark[]
-  getMarkCount: (region: 'article' | 'option', optionKey?: string) => number
+  aiScore?: {
+    vocabScore: number
+    fluencyScore: number
+    totalScore: number
+    feedback: string
+  }
 }
 
 interface TranslationPanelProps {
-  sentences: TranslationSentence[]
+  content: string           // 完整文章
+  title: string
+  sentences: TranslationSentence[]  // 划线句子
   currentIndex: number
   onSelectSentence: (index: number) => void
   isSubmitted: boolean
-  textMark: TextMarkHook
+  textMark?: ReturnType<typeof useTextMark>
   onAskAI?: (question: string) => void
 }
 
 export default function TranslationPanel({
+  content,
+  title,
   sentences,
   currentIndex,
   onSelectSentence,
@@ -45,10 +45,20 @@ export default function TranslationPanel({
   onAskAI,
 }: TranslationPanelProps) {
   const [eyeCareMode, setEyeCareMode] = useState(true)
-  const contentRefs = useRef<Record<string, HTMLSpanElement | null>>({})
+  const contentRef = useRef<HTMLDivElement>(null)
   
-  const handleMouseUp = useCallback((sentenceId: string) => {
-    if (!textMark.isMarkMode) return
+  // 生词功能
+  const [selectedWord, setSelectedWord] = useState<string | null>(null)
+  const [wordMeaning, setWordMeaning] = useState<string>('')
+  const [wordPhonetic, setWordPhonetic] = useState<string>('')
+  const [wordPos, setWordPos] = useState<string>('')
+  const [isLoadingMeaning, setIsLoadingMeaning] = useState(false)
+  const [popupPosition, setPopupPosition] = useState({ x: 0, y: 0 })
+  const [addedWords, setAddedWords] = useState<Set<string>>(new Set())
+  
+  // 处理文章区域的文本选择（标记模式）
+  const handleArticleMouseUp = useCallback((e: React.MouseEvent) => {
+    if (!textMark?.isMarkMode || isSubmitted) return
     
     const selection = window.getSelection()
     if (!selection || selection.isCollapsed) return
@@ -56,23 +66,237 @@ export default function TranslationPanel({
     const selectedText = selection.toString().trim()
     if (!selectedText) return
     
-    const contentEl = contentRefs.current[sentenceId]
-    if (!contentEl) return
-    
     const range = selection.getRangeAt(0)
+    const container = contentRef.current
+    if (!container) return
+    
     const preSelectionRange = document.createRange()
-    preSelectionRange.selectNodeContents(contentEl)
+    preSelectionRange.selectNodeContents(container)
     preSelectionRange.setEnd(range.startContainer, range.startOffset)
     const start = preSelectionRange.toString().length
+    
     const end = start + selectedText.length
     
-    textMark.addMark('article', selectedText, start, end, sentenceId)
+    textMark.addMark('article', selectedText, start, end)
     selection.removeAllRanges()
+  }, [textMark, isSubmitted])
+  
+  // 点击文章中的标记删除
+  const handleArticleMarkClick = useCallback((mark: TextMark, e: React.MouseEvent) => {
+    e.stopPropagation()
+    textMark?.removeMark(mark.id)
   }, [textMark])
   
-  // 获取文章区域的标记
-  const articleMarks = textMark.getMarks('article')
+  // 处理单词点击
+  const handleWordClick = useCallback(async (word: string, e: React.MouseEvent) => {
+    if (!isSubmitted) return
+    
+    const cleanWord = word.replace(/[.,!?;:'"()]/g, '').toLowerCase()
+    if (!cleanWord || cleanWord.length < 2) return
+    
+    const rect = (e.target as HTMLElement).getBoundingClientRect()
+    setPopupPosition({ x: rect.left, y: rect.bottom + 5 })
+    setSelectedWord(cleanWord)
+    
+    setIsLoadingMeaning(true)
+    try {
+      const response = await fetch('/api/dictionary/lookup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ word: cleanWord }),
+      })
+      const data = await response.json()
+      setWordMeaning(data.meaning || '未找到释义')
+      setWordPhonetic(data.phonetic || '')
+      setWordPos(data.pos || '')
+    } catch (error) {
+      setWordMeaning('获取释义失败')
+    } finally {
+      setIsLoadingMeaning(false)
+    }
+  }, [isSubmitted])
   
+  // 收藏到生词本
+  const addToVocabulary = async () => {
+    if (!selectedWord || !wordMeaning) return
+    try {
+      await fetch('/api/vocabulary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ word: selectedWord, isFavorite: true }),
+      })
+      setAddedWords(prev => new Set(prev).add(selectedWord))
+    } catch (error) {
+      console.error('收藏失败:', error)
+    }
+  }
+  
+  // 渲染带标记的文本
+  const renderMarkedText = (text: string, globalOffset: number) => {
+    if (!textMark) return <span>{text}</span>
+    
+    const articleMarks = textMark.getMarks('article')
+    if (articleMarks.length === 0) return <span>{text}</span>
+    
+    const textStart = globalOffset
+    const textEnd = globalOffset + text.length
+    
+    const relevantMarks = articleMarks.filter(m => 
+      m.start < textEnd && m.end > textStart
+    )
+    
+    if (relevantMarks.length === 0) return <span>{text}</span>
+    
+    const elements: React.ReactNode[] = []
+    let lastIndex = 0
+    
+    relevantMarks.forEach((mark, i) => {
+      const markStart = Math.max(0, mark.start - textStart)
+      const markEnd = Math.min(text.length, mark.end - textStart)
+      
+      if (markStart > lastIndex) {
+        elements.push(
+          <span key={`text-${i}`}>{text.slice(lastIndex, markStart)}</span>
+        )
+      }
+      const colorStyle = textMark.getMarkColorStyle(mark.color)
+      elements.push(
+        <span
+          key={`mark-${mark.id}`}
+          className="cursor-pointer rounded px-0.5"
+          style={{ background: colorStyle.bg }}
+          onClick={(e) => handleArticleMarkClick(mark, e)}
+          title="点击删除标记"
+        >
+          {text.slice(markStart, markEnd)}
+        </span>
+      )
+      lastIndex = markEnd
+    })
+    
+    if (lastIndex < text.length) {
+      elements.push(<span key="text-end">{text.slice(lastIndex)}</span>)
+    }
+    
+    return elements
+  }
+  
+  // 渲染文章内容，标记划线句子
+  const renderContent = () => {
+    // 构建句子位置映射
+    const sentencePositions: { start: number; end: number; sentence: TranslationSentence }[] = []
+    
+    sentences.forEach(sentence => {
+      const index = content.indexOf(sentence.englishText)
+      if (index !== -1) {
+        sentencePositions.push({
+          start: index,
+          end: index + sentence.englishText.length,
+          sentence
+        })
+      }
+    })
+    
+    // 按位置排序
+    sentencePositions.sort((a, b) => a.start - b.start)
+    
+    const elements: React.ReactNode[] = []
+    let lastIndex = 0
+    let globalOffset = 0
+    
+    // 处理段落
+    const paragraphs = content.split('\n\n')
+    
+    paragraphs.forEach((paragraph, pIndex) => {
+      const paragraphStart = globalOffset
+      const paragraphEnd = globalOffset + paragraph.length
+      
+      // 找出当前段落中的划线句子
+      const sentencesInParagraph = sentencePositions.filter(sp => 
+        sp.start >= paragraphStart && sp.start < paragraphEnd
+      )
+      
+      if (sentencesInParagraph.length > 0) {
+        const paragraphElements: React.ReactNode[] = []
+        let pLastIndex = 0
+        
+        sentencesInParagraph.forEach((sp, sIndex) => {
+          const localStart = sp.start - paragraphStart
+          const localEnd = sp.end - paragraphStart
+          const sentenceIndex = sentences.findIndex(s => s.id === sp.sentence.id)
+          const isCurrent = sentenceIndex === currentIndex
+          const hasAnswer = !!sp.sentence.userAnswer
+          
+          // 添加前面的文本
+          if (localStart > pLastIndex) {
+            const textBefore = paragraph.slice(pLastIndex, localStart)
+            paragraphElements.push(
+              <span key={`text-${pIndex}-${sIndex}`}>
+                {renderMarkedText(textBefore, paragraphStart + pLastIndex)}
+              </span>
+            )
+          }
+          
+          // 添加划线句子
+          paragraphElements.push(
+            <span
+              key={`sentence-${sp.sentence.id}`}
+              className={`
+                cursor-pointer px-1 rounded transition-all
+                ${isCurrent ? 'ring-2 ring-blue-500 bg-blue-100' : 'bg-yellow-100'}
+                ${hasAnswer && !isSubmitted ? 'border-b-2 border-blue-400' : ''}
+              `}
+              style={{
+                textDecoration: 'underline',
+                textDecorationColor: isCurrent ? '#3b82f6' : '#eab308',
+                textDecorationThickness: '2px',
+                textUnderlineOffset: '3px',
+              }}
+              onClick={() => onSelectSentence(sentenceIndex)}
+            >
+              {sp.sentence.englishText}
+              <span className="ml-1 text-xs text-blue-500 font-medium">
+                ({sp.sentence.sentenceNum})
+              </span>
+            </span>
+          )
+          
+          pLastIndex = localEnd
+        })
+        
+        // 添加剩余文本
+        if (pLastIndex < paragraph.length) {
+          const textAfter = paragraph.slice(pLastIndex)
+          paragraphElements.push(
+            <span key={`text-end-${pIndex}`}>
+              {renderMarkedText(textAfter, paragraphStart + pLastIndex)}
+            </span>
+          )
+        }
+        
+        elements.push(
+          <p key={`p-${pIndex}`} className="mb-6 leading-loose text-[17px]">
+            {paragraphElements}
+          </p>
+        )
+      } else {
+        // 没有划线句子的段落
+        elements.push(
+          <p key={`p-${pIndex}`} className="mb-6 leading-loose text-[17px]">
+            {renderMarkedText(paragraph, paragraphStart)}
+          </p>
+        )
+      }
+      
+      globalOffset = paragraphEnd + 2 // +2 for '\n\n'
+    })
+    
+    return elements
+  }
+  
+  // 计算统计
+  const answeredCount = sentences.filter(s => s.userAnswer && s.userAnswer.trim()).length
+
   return (
     <div 
       className="h-full flex flex-col transition-all duration-300"
@@ -85,7 +309,7 @@ export default function TranslationPanel({
     >
       {/* 标题栏 */}
       <div 
-        className="p-4 border-b flex-shrink-0 flex items-center justify-between"
+        className="p-4 border-b flex-shrink-0"
         style={{ 
           background: eyeCareMode 
             ? 'linear-gradient(135deg, #C8E6C9 0%, #DCEDC8 100%)'
@@ -93,171 +317,193 @@ export default function TranslationPanel({
           borderColor: eyeCareMode ? '#A5D6A7' : '#e5e7eb'
         }}
       >
+        <div className="flex items-center justify-between mb-2">
+          <h2 
+            className="text-xl font-bold"
+            style={{ color: eyeCareMode ? '#2E7D32' : '#111827' }}
+          >
+            {title}
+          </h2>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setEyeCareMode(!eyeCareMode)}
+            style={{ background: eyeCareMode ? 'rgba(255,255,255,0.5)' : 'transparent' }}
+          >
+            {eyeCareMode ? (
+              <div className="flex items-center gap-1">
+                <span className="text-xs">护眼</span>
+                <Sun className="w-4 h-4 text-amber-600" />
+              </div>
+            ) : (
+              <Moon className="w-4 h-4 text-gray-500" />
+            )}
+          </Button>
+        </div>
         <div className="flex items-center gap-2">
-          <Badge className="bg-blue-500 text-white">英文原文</Badge>
-          <span className="text-sm" style={{ color: eyeCareMode ? '#558B2F' : '#6b7280' }}>
-            共 {sentences.length} 句待翻译
+          <Badge 
+            variant="outline" 
+            className="text-xs"
+            style={eyeCareMode ? { borderColor: '#81C784', color: '#388E3C' } : {}}
+          >
+            英译汉
+          </Badge>
+          <Badge 
+            className="text-xs"
+            style={eyeCareMode ? { background: '#C8E6C9', color: '#2E7D32' } : { background: '#fef3c7', color: '#92400e' }}
+          >
+            {answeredCount}/{sentences.length} 已翻译
+          </Badge>
+          <span className="text-xs ml-2" style={{ color: eyeCareMode ? '#689F38' : '#9ca3af' }}>
+            点击划线句子翻译
           </span>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setEyeCareMode(!eyeCareMode)}
-          style={{ background: eyeCareMode ? 'rgba(255,255,255,0.5)' : 'transparent' }}
-        >
-          {eyeCareMode ? (
-            <div className="flex items-center gap-1">
-              <span className="text-xs">护眼</span>
-              <Sun className="w-4 h-4 text-amber-600" />
-            </div>
-          ) : (
-            <Moon className="w-4 h-4 text-gray-500" />
-          )}
-        </Button>
       </div>
       
-      {/* 句子列表 */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4" style={{ minHeight: 0 }}>
-        {sentences.map((sentence, index) => {
-          const isActive = index === currentIndex
-          const hasAnswer = !!sentence.userAnswer
-          
-          // 获取当前句子的标记
-          const sentenceMarks = articleMarks.filter(m => 
-            m.optionKey === sentence.id
-          )
-          
-          return (
-            <div
-              key={sentence.id}
-              className={`p-4 rounded-xl cursor-pointer transition-all ${
-                isActive ? 'ring-2 ring-blue-500' : ''
-              }`}
-              style={{ 
-                background: isActive 
-                  ? (eyeCareMode ? 'rgba(255,255,255,0.9)' : '#f0f9ff')
-                  : (eyeCareMode ? 'rgba(255,255,255,0.5)' : '#ffffff'),
-                border: `1px solid ${isActive ? '#3b82f6' : (eyeCareMode ? '#A5D6A7' : '#e5e7eb')}`,
-                boxShadow: isActive ? '0 4px 12px rgba(59, 130, 246, 0.15)' : 'none'
-              }}
-              onClick={() => onSelectSentence(index)}
-            >
-              {/* 句子编号 */}
-              <div className="flex items-center gap-2 mb-2">
-                <span 
-                  className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-medium"
-                  style={{ 
-                    background: hasAnswer 
-                      ? (isSubmitted ? '#10b981' : '#3b82f6')
-                      : '#9ca3af'
-                  }}
-                >
-                  {sentence.sentenceNum}
-                </span>
-                {hasAnswer && !isSubmitted && (
-                  <Badge variant="outline" className="text-xs text-blue-600 border-blue-200">
-                    已翻译
-                  </Badge>
-                )}
-                {isSubmitted && sentence.chinese && (
-                  <Badge variant="outline" className="text-xs text-emerald-600 border-emerald-200">
-                    已完成
-                  </Badge>
-                )}
-              </div>
-              
-              {/* 英文原文 */}
-              <div 
-                className="text-base leading-relaxed"
-                style={{ color: eyeCareMode ? '#2E7D32' : '#1f2937' }}
-              >
-                <span
-                  ref={el => { contentRefs.current[sentence.id] = el }}
-                  onMouseUp={() => handleMouseUp(sentence.id)}
-                  className="cursor-text"
-                >
-                  {sentence.english}
-                </span>
-              </div>
-              
-              {/* 标记显示 */}
-              {sentenceMarks.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {sentenceMarks.map(mark => (
-                    <span
-                      key={mark.id}
-                      className="px-2 py-0.5 rounded text-xs cursor-pointer hover:opacity-80 bg-yellow-200 text-gray-700"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        textMark.removeMark(mark.id)
-                      }}
-                    >
-                      {mark.text}
-                    </span>
-                  ))}
-                </div>
-              )}
-              
-              {/* 参考译文（提交后显示） */}
-              {isSubmitted && sentence.chinese && (
-                <div className="mt-3 p-3 rounded-lg bg-emerald-50 border border-emerald-200">
-                  <div className="text-xs font-medium text-emerald-700 mb-1">参考译文</div>
-                  <div className="text-sm text-emerald-900">{sentence.chinese}</div>
-                </div>
-              )}
-              
-              {/* 用户翻译（提交后显示） */}
-              {isSubmitted && sentence.userAnswer && (
-                <div className="mt-2 p-3 rounded-lg bg-blue-50 border border-blue-200">
-                  <div className="text-xs font-medium text-blue-700 mb-1">你的翻译</div>
-                  <div className="text-sm text-blue-900">{sentence.userAnswer}</div>
-                </div>
-              )}
-              
-              {/* 问AI按钮 */}
-              {onAskAI && (
-                <div className="mt-3">
-                  <button
-                    className="text-xs text-emerald-600 hover:text-emerald-700 font-medium flex items-center gap-1"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      onAskAI(`请帮我分析这句话的翻译要点：\n\n${sentence.english}`)
-                    }}
-                  >
-                    <MessageCircle className="w-3 h-3" />
-                    <span>🐱 问AI助教</span>
-                  </button>
-                </div>
-              )}
-            </div>
-          )
-        })}
-      </div>
-      
-      {/* 标记工具栏 */}
-      {textMark.isMarkMode && (
-        <div 
-          className="p-3 border-t flex-shrink-0"
-          style={{ 
-            background: eyeCareMode ? '#C8E6C9' : '#f9fafb',
-            borderColor: eyeCareMode ? '#A5D6A7' : '#e5e7eb'
+      {/* 文章内容 */}
+      <div 
+        className="relative p-6"
+        style={{ 
+          flex: '1 1 0%', 
+          minHeight: 0, 
+          overflowY: 'auto',
+          background: eyeCareMode 
+            ? 'linear-gradient(180deg, #F1F8E9 0%, #FFFDE7 100%)'
+            : '#ffffff',
+          cursor: textMark?.isMarkMode ? 'text' : 'default'
+        }}
+        ref={contentRef}
+        onMouseUp={handleArticleMouseUp}
+      >
+        <div
+          className="prose prose-sm max-w-none select-text"
+          style={{ color: eyeCareMode ? '#33691E' : '#374151' }}
+          onDoubleClick={(e) => {
+            const selection = window.getSelection()
+            const word = selection?.toString().trim()
+            if (word && isSubmitted) {
+              handleWordClick(word, e)
+            }
           }}
         >
-          <div className="flex items-center justify-between">
-            <span className="text-xs" style={{ color: eyeCareMode ? '#558B2F' : '#6b7280' }}>
-              标记模式已开启，选择文本即可标记
-            </span>
-            {textMark.marks.length > 0 && (
-              <button
-                className="text-xs text-red-500 hover:text-red-600"
-                onClick={() => textMark.clearAllMarks()}
-              >
-                清除全部 ({textMark.marks.length})
+          {renderContent()}
+        </div>
+        
+        {/* 生词弹窗 */}
+        {selectedWord && isSubmitted && (
+          <div 
+            className="fixed z-50 bg-white rounded-lg shadow-xl border border-gray-200 p-4 w-72 max-h-80"
+            style={{ 
+              left: Math.min(popupPosition.x, window.innerWidth - 300),
+              top: Math.min(popupPosition.y, window.innerHeight - 350)
+            }}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <span className="font-bold text-lg text-gray-900">{selectedWord}</span>
+                {wordPhonetic && <span className="ml-2 text-sm text-gray-500">/{wordPhonetic}/</span>}
+              </div>
+              <button onClick={() => setSelectedWord(null)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-4 h-4" />
               </button>
+            </div>
+            {wordPos && (
+              <div className="mb-2">
+                <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">{wordPos}</span>
+              </div>
+            )}
+            {isLoadingMeaning ? (
+              <div className="flex items-center gap-2 text-gray-500">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>查询中...</span>
+              </div>
+            ) : (
+              <>
+                <div className="text-sm text-gray-700 mb-3 leading-relaxed max-h-40 overflow-y-auto">
+                  {wordMeaning.split('\\n').map((line, i) => (
+                    <div key={i} className="mb-1">{line}</div>
+                  ))}
+                </div>
+                <Button 
+                  size="sm" 
+                  onClick={addToVocabulary}
+                  disabled={addedWords.has(selectedWord)}
+                  className="w-full"
+                  variant={addedWords.has(selectedWord) ? "secondary" : "default"}
+                >
+                  <BookPlus className="w-4 h-4 mr-1" />
+                  {addedWords.has(selectedWord) ? '已收藏' : '收藏到生词本'}
+                </Button>
+              </>
             )}
           </div>
+        )}
+      </div>
+      
+      {/* 底部句子导航 */}
+      <div 
+        className="p-3 border-t flex-shrink-0"
+        style={{ 
+          background: eyeCareMode 
+            ? 'linear-gradient(135deg, #C8E6C9 0%, #DCEDC8 100%)'
+            : '#f9fafb',
+          borderColor: eyeCareMode ? '#A5D6A7' : '#e5e7eb'
+        }}
+      >
+        {/* 标记模式颜色选择器 */}
+        {textMark?.isMarkMode && (
+          <div className="flex items-center gap-2 mb-2 pb-2 border-b" style={{ borderColor: eyeCareMode ? '#A5D6A7' : '#e5e7eb' }}>
+            <span className="text-xs" style={{ color: eyeCareMode ? '#558B2F' : '#6b7280' }}>
+              标记颜色：
+            </span>
+            {Object.entries(MARK_COLORS).map(([key, color]) => (
+              <button
+                key={key}
+                className={`w-6 h-6 rounded-full border-2 transition-all ${
+                  textMark.currentColor === key ? 'ring-2 ring-offset-1 ring-gray-400 scale-110' : ''
+                }`}
+                style={{ 
+                  background: color.bg,
+                  borderColor: color.border,
+                }}
+                onClick={() => textMark.setCurrentColor(key as MarkColorType)}
+                title={`${color.name} (按 ${Object.keys(MARK_COLORS).indexOf(key) + 1})`}
+              />
+            ))}
+          </div>
+        )}
+        
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs" style={{ color: eyeCareMode ? '#558B2F' : '#6b7280' }}>
+            划线句子：
+          </span>
+          {sentences.map((sentence, index) => {
+            const isCurrent = index === currentIndex
+            const hasAnswer = !!sentence.userAnswer
+            
+            return (
+              <button
+                key={sentence.id}
+                onClick={() => onSelectSentence(index)}
+                className={`
+                  w-8 h-8 rounded-lg font-medium text-sm transition-all
+                  ${isCurrent ? 'ring-2 ring-offset-2 ring-blue-500' : ''}
+                  ${isSubmitted && sentence.aiScore
+                    ? sentence.aiScore.totalScore >= 1.5 
+                      ? 'bg-green-100 text-green-700 border-2 border-green-400'
+                      : 'bg-red-100 text-red-700 border-2 border-red-400'
+                    : hasAnswer
+                      ? 'bg-blue-100 text-blue-700 border-2 border-blue-400'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }
+                `}
+              >
+                {sentence.sentenceNum}
+              </button>
+            )
+          })}
         </div>
-      )}
+      </div>
     </div>
   )
 }

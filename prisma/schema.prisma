@@ -26,6 +26,7 @@ model Article {
   clozeBlanks     ClozeBlank[]     // 完型填空选项
   sevenFiveOpts   SevenFiveOption[] // 七选五选项
   writingTask     WritingTask?     // 写作任务
+  translationSentences TranslationSentence[] // 翻译句子
 
   @@map("articles")
 }
@@ -204,4 +205,20 @@ model Vocabulary {
   lastReviewAt DateTime?
 
   @@map("vocabularies")
+}
+
+// 翻译句子
+model TranslationSentence {
+  id             String   @id @default(cuid())
+  articleId      String
+  sentenceNum    Int      // 句子编号（1-5）
+  englishText    String   // 英文原句（划线句子）
+  referenceCn    String   // 参考译文
+  keyVocabulary  String?  // 重点词汇（JSON格式：[{word, meaning, score}]）
+  grammarPoints  String?  // 语法要点（JSON格式）
+  scoringRules   String?  // 评分规则（JSON格式：{vocabScore, fluencyScore, totalScore}）
+  article        Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@unique([articleId, sentenceNum])
+  @@map("translation_sentences")
 }

@@ -13,10 +13,20 @@ import { useTextMark } from '@/hooks/useTextMark'
 interface TranslationSentence {
   id: string
   sentenceNum: number
-  english: string
-  chinese?: string
+  englishText: string
+  referenceCn?: string
+  keyVocabulary?: string
+  grammarPoints?: string
+  scoringRules?: string
   userAnswer?: string
-  analysis?: string
+  aiScore?: {
+    vocabScore: number
+    fluencyScore: number
+    totalScore: number
+    feedback: string
+    keyWordsCorrect: string[]
+    keyWordsMissing: string[]
+  }
 }
 
 interface Article {
@@ -33,6 +43,7 @@ interface Article {
     correctAnswer: string
     analysis: string
   }>
+  translationSentences?: TranslationSentence[]
 }
 
 export default function TranslationPracticePage({ params }: { params: Promise<{ id: string }> }) {
@@ -59,13 +70,16 @@ export default function TranslationPracticePage({ params }: { params: Promise<{ 
         setArticle(data)
         
         // 解析翻译句子
-        if (data.questions && data.questions.length > 0) {
+        if (data.translationSentences && data.translationSentences.length > 0) {
+          setSentences(data.translationSentences)
+        } else if (data.questions && data.questions.length > 0) {
+          // 兼容旧数据格式
           const translationSentences: TranslationSentence[] = data.questions.map((q: any) => ({
             id: q.id,
             sentenceNum: q.questionNum,
-            english: q.stem, // 英文原文存在stem字段
-            chinese: q.correctAnswer, // 参考译文存在correctAnswer字段
-            analysis: q.analysis,
+            englishText: q.stem,
+            referenceCn: q.correctAnswer,
+            grammarPoints: q.analysis,
           }))
           setSentences(translationSentences)
         }
@@ -90,6 +104,12 @@ export default function TranslationPracticePage({ params }: { params: Promise<{ 
   const handleAnswerChange = (sentenceId: string, answer: string) => {
     setSentences(prev => prev.map(s => 
       s.id === sentenceId ? { ...s, userAnswer: answer } : s
+    ))
+  }
+  
+  const handleAIScore = (sentenceId: string, score: TranslationSentence['aiScore']) => {
+    setSentences(prev => prev.map(s => 
+      s.id === sentenceId ? { ...s, aiScore: score } : s
     ))
   }
   
@@ -183,7 +203,7 @@ export default function TranslationPracticePage({ params }: { params: Promise<{ 
               )}
             </div>
             <Badge variant="outline" className="text-sm">
-              翻译
+              英译汉
             </Badge>
             {isSubmitted && (
               <Badge className="bg-emerald-500 text-white text-sm">已完成</Badge>
@@ -207,6 +227,8 @@ export default function TranslationPracticePage({ params }: { params: Promise<{ 
           style={{ width: '50%', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
         >
           <TranslationPanel
+            content={article.content}
+            title={article.title}
             sentences={sentences}
             currentIndex={currentIndex}
             onSelectSentence={setCurrentIndex}
@@ -229,6 +251,7 @@ export default function TranslationPracticePage({ params }: { params: Promise<{ 
             isSubmitted={isSubmitted}
             startTime={startTime}
             onAskAI={handleAskAI}
+            onAIScore={handleAIScore}
           />
         </div>
         
@@ -243,9 +266,9 @@ export default function TranslationPracticePage({ params }: { params: Promise<{ 
             questions={sentences.map(s => ({
               id: s.id,
               questionNum: s.sentenceNum,
-              stem: s.english,
-              correctAnswer: s.chinese || '',
-              analysis: s.analysis || '',
+              stem: s.englishText,
+              correctAnswer: s.referenceCn || '',
+              analysis: s.grammarPoints || '',
               userAnswer: s.userAnswer,
               options: [],
             }))}
