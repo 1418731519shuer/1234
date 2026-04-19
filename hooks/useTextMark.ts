@@ -10,14 +10,23 @@ export interface TextMark {
   start: number
   end: number
   text: string
+  color: string  // 标记颜色
 }
 
-// 标记颜色
-export const MARK_COLOR = '#fef08a' // 黄色高亮
+// 4种护眼柔和颜色
+export const MARK_COLORS = {
+  yellow: { bg: '#fef08a', border: '#facc15', name: '黄色' },
+  green: { bg: '#bbf7d0', border: '#4ade80', name: '绿色' },
+  blue: { bg: '#bfdbfe', border: '#60a5fa', name: '蓝色' },
+  pink: { bg: '#fbcfe8', border: '#f472b6', name: '粉色' },
+}
+
+export type MarkColorType = keyof typeof MARK_COLORS
 
 export function useTextMark(isSubmitted: boolean) {
   const [isMarkMode, setIsMarkMode] = useState(false)
   const [marks, setMarks] = useState<TextMark[]>([])
+  const [currentColor, setCurrentColor] = useState<MarkColorType>('yellow')
   
   // 提交后清除标记
   useEffect(() => {
@@ -32,6 +41,11 @@ export function useTextMark(isSubmitted: boolean) {
       if (e.key === 'Shift' && !isSubmitted) {
         setIsMarkMode(prev => !prev)
       }
+      // 数字键1-4切换颜色
+      if (e.key === '1') setCurrentColor('yellow')
+      if (e.key === '2') setCurrentColor('green')
+      if (e.key === '3') setCurrentColor('blue')
+      if (e.key === '4') setCurrentColor('pink')
     }
     
     window.addEventListener('keydown', handleKeyDown)
@@ -55,10 +69,11 @@ export function useTextMark(isSubmitted: boolean) {
         start,
         end,
         text,
+        color: currentColor,
       }
       setMarks(prev => [...prev, newMark])
     }
-  }, [marks])
+  }, [marks, currentColor])
   
   // 删除标记
   const removeMark = useCallback((markId: string) => {
@@ -94,6 +109,11 @@ export function useTextMark(isSubmitted: boolean) {
     }).length
   }, [marks])
   
+  // 获取标记颜色样式
+  const getMarkColorStyle = useCallback((color: string) => {
+    return MARK_COLORS[color as MarkColorType] || MARK_COLORS.yellow
+  }, [])
+  
   return {
     isMarkMode,
     setIsMarkMode,
@@ -104,5 +124,8 @@ export function useTextMark(isSubmitted: boolean) {
     clearAllMarks,
     getMarks,
     getMarkCount,
+    currentColor,
+    setCurrentColor,
+    getMarkColorStyle,
   }
 }

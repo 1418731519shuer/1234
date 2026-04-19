@@ -4,7 +4,7 @@ import { useState, useCallback, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Sun, Moon, BookPlus, X, Loader2 } from 'lucide-react'
-import { useTextMark, MARK_COLOR, TextMark } from '@/hooks/useTextMark'
+import { useTextMark, MARK_COLORS, TextMark, MarkColorType } from '@/hooks/useTextMark'
 
 interface ClozeBlank {
   blankNum: number
@@ -121,11 +121,12 @@ export default function ClozePanel({
           <span key={`tm-text-${i}`}>{text.slice(lastIndex, markStart)}</span>
         )
       }
+      const colorStyle = textMark.getMarkColorStyle(mark.color)
       elements.push(
         <span
           key={`tm-mark-${mark.id}`}
           className="cursor-pointer rounded px-0.5"
-          style={{ background: MARK_COLOR }}
+          style={{ background: colorStyle.bg }}
           onClick={(e) => handleArticleMarkClick(mark, e)}
           title="点击删除标记"
         >
@@ -454,6 +455,32 @@ export default function ClozePanel({
           borderColor: eyeCareMode ? '#A5D6A7' : '#e5e7eb'
         }}
       >
+        {/* 标记模式颜色选择器 */}
+        {textMark?.isMarkMode && (
+          <div className="flex items-center gap-2 mb-2 pb-2 border-b" style={{ borderColor: eyeCareMode ? '#A5D6A7' : '#e5e7eb' }}>
+            <span className="text-xs" style={{ color: eyeCareMode ? '#558B2F' : '#6b7280' }}>
+              标记颜色：
+            </span>
+            {Object.entries(MARK_COLORS).map(([key, color]) => (
+              <button
+                key={key}
+                className={`w-6 h-6 rounded-full border-2 transition-all ${
+                  textMark.currentColor === key ? 'ring-2 ring-offset-1 ring-gray-400 scale-110' : ''
+                }`}
+                style={{ 
+                  background: color.bg,
+                  borderColor: color.border,
+                }}
+                onClick={() => textMark.setCurrentColor(key as MarkColorType)}
+                title={`${color.name} (按 ${Object.keys(MARK_COLORS).indexOf(key) + 1})`}
+              />
+            ))}
+            <span className="text-xs ml-2" style={{ color: eyeCareMode ? '#689F38' : '#9ca3af' }}>
+              当前: {MARK_COLORS[textMark.currentColor].name}
+            </span>
+          </div>
+        )}
+        
         <div className="flex items-center gap-1 flex-wrap">
           {blanks.sort((a, b) => a.blankNum - b.blankNum).map(blank => {
             const answer = answers[blank.blankNum]

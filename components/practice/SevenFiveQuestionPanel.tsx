@@ -3,7 +3,7 @@
 import { useState, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { useTextMark, MARK_COLOR, TextMark } from '@/hooks/useTextMark'
+import { useTextMark, MARK_COLORS, TextMark, MarkColorType } from '@/hooks/useTextMark'
 
 interface SevenFiveQuestionPanelProps {
   options: Array<{ key: string; content: string }>  // A-G段落
@@ -185,12 +185,13 @@ export default function SevenFiveQuestionPanel({
           <span key={`text-${i}`}>{content.slice(lastIndex, mark.start)}</span>
         )
       }
-      // 标记部分
+      // 标记部分 - 使用标记的颜色
+      const colorStyle = textMark.getMarkColorStyle(mark.color)
       elements.push(
         <span
           key={`mark-${mark.id}`}
           className="cursor-pointer rounded px-0.5"
-          style={{ background: MARK_COLOR }}
+          style={{ background: colorStyle.bg }}
           onClick={(e) => handleMarkClick(mark, e)}
           title="点击删除标记"
         >
@@ -343,6 +344,30 @@ export default function SevenFiveQuestionPanel({
       
       {/* 提交按钮 */}
       <div className="p-3 border-t bg-white flex-shrink-0">
+        {/* 标记模式颜色选择器 */}
+        {textMark?.isMarkMode && (
+          <div className="flex items-center gap-2 mb-3 pb-3 border-b">
+            <span className="text-xs text-gray-500">标记颜色：</span>
+            {Object.entries(MARK_COLORS).map(([key, color]) => (
+              <button
+                key={key}
+                className={`w-6 h-6 rounded-full border-2 transition-all ${
+                  textMark.currentColor === key ? 'ring-2 ring-offset-1 ring-gray-400 scale-110' : ''
+                }`}
+                style={{ 
+                  background: color.bg,
+                  borderColor: color.border,
+                }}
+                onClick={() => textMark.setCurrentColor(key as MarkColorType)}
+                title={`${color.name} (按 ${Object.keys(MARK_COLORS).indexOf(key) + 1})`}
+              />
+            ))}
+            <span className="text-xs text-gray-400 ml-2">
+              当前: {MARK_COLORS[textMark.currentColor].name}
+            </span>
+          </div>
+        )}
+        
         {errorMsg && (
           <div className="mb-2 p-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600">
             {errorMsg}

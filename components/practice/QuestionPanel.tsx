@@ -14,7 +14,7 @@ import {
   Clock,
   Flag
 } from 'lucide-react'
-import { useTextMark, MARK_COLOR, TextMark } from '@/hooks/useTextMark'
+import { useTextMark, MARK_COLORS, TextMark, MarkColorType } from '@/hooks/useTextMark'
 
 interface Question {
   id: string
@@ -63,6 +63,7 @@ export default function QuestionPanel({
 }: QuestionPanelProps) {
   const [elapsedTime, setElapsedTime] = useState(0)
   const optionRefs = useRef<Record<string, HTMLSpanElement>>({})
+  const stemRefs = useRef<Record<string, HTMLSpanElement>>({})
   
   // 计时器
   useEffect(() => {
@@ -94,6 +95,34 @@ export default function QuestionPanel({
     const question = questions.find(q => q.id === questionId)
     return question && answers[questionId] === question.correctAnswer
   }
+  
+  // 处理题干文本选择（标记模式）
+  const handleStemMouseUp = useCallback((questionId: string, e: React.MouseEvent) => {
+    if (!textMark?.isMarkMode || isSubmitted) return
+    
+    const selection = window.getSelection()
+    if (!selection || selection.isCollapsed) return
+    
+    const selectedText = selection.toString().trim()
+    if (!selectedText) return
+    
+    const refKey = `stem-${questionId}`
+    const container = stemRefs.current[questionId]
+    if (!container) return
+    
+    const range = selection.getRangeAt(0)
+    
+    // 获取选中文本在容器内的位置
+    const preSelectionRange = document.createRange()
+    preSelectionRange.selectNodeContents(container)
+    preSelectionRange.setEnd(range.startContainer, range.startOffset)
+    const start = preSelectionRange.toString().length
+    
+    const end = start + selectedText.length
+    
+    textMark.addMark('option', selectedText, start, end, refKey)
+    selection.removeAllRanges()
+  }, [textMark, isSubmitted])
   
   // 处理选项文本选择（标记模式）
   const handleOptionMouseUp = useCallback((questionId: string, optionKey: string, e: React.MouseEvent) => {
@@ -129,6 +158,46 @@ export default function QuestionPanel({
     textMark?.removeMark(mark.id)
   }, [textMark])
   
+  // 渲染带标记的题干
+  const renderMarkedStem = (questionId: string, content: string) => {
+    const refKey = `stem-${questionId}`
+    
+    if (!textMark) return <span>{content}</span>
+    
+    const stemMarks = textMark.getMarks('option', refKey)
+    if (stemMarks.length === 0) return <span>{content}</span>
+    
+    const elements: React.ReactNode[] = []
+    let lastIndex = 0
+    
+    stemMarks.forEach((mark, i) => {
+      if (mark.start > lastIndex) {
+        elements.push(
+          <span key={`text-${i}`}>{content.slice(lastIndex, mark.start)}</span>
+        )
+      }
+      const colorStyle = textMark.getMarkColorStyle(mark.color)
+      elements.push(
+        <span
+          key={`mark-${mark.id}`}
+          className="cursor-pointer rounded px-0.5"
+          style={{ background: colorStyle.bg }}
+          onClick={(e) => handleMarkClick(mark, e)}
+          title="点击删除标记"
+        >
+          {content.slice(mark.start, mark.end)}
+        </span>
+      )
+      lastIndex = mark.end
+    })
+    
+    if (lastIndex < content.length) {
+      elements.push(<span key="text-end">{content.slice(lastIndex)}</span>)
+    }
+    
+    return elements
+  }
+  
   // 渲染带标记的选项内容
   const renderMarkedOption = (questionId: string, optionKey: string, content: string) => {
     const refKey = `${questionId}-${optionKey}`
@@ -147,11 +216,12 @@ export default function QuestionPanel({
           <span key={`text-${i}`}>{content.slice(lastIndex, mark.start)}</span>
         )
       }
+      const colorStyle = textMark.getMarkColorStyle(mark.color)
       elements.push(
         <span
           key={`mark-${mark.id}`}
           className="cursor-pointer rounded px-0.5"
-          style={{ background: MARK_COLOR }}
+          style={{ background: colorStyle.bg }}
           onClick={(e) => handleMarkClick(mark, e)}
           title="点击删除标记"
         >
@@ -243,7 +313,13 @@ export default function QuestionPanel({
                 {currentQuestion.questionNum}
               </div>
               <CardTitle className="text-lg">
-                {currentQuestion.stem}
+                <span
+                  ref={(el) => { if (el) stemRefs.current[currentQuestion.id] = el }}
+                  onMouseUp={(e) => handleStemMouseUp(currentQuestion.id, e)}
+                  className={textMark?.isMarkMode ? 'cursor-text' : ''}
+                >
+                  {renderMarkedStem(currentQuestion.id, currentQuestion.stem)}
+                </span>
               </CardTitle>
             </div>
             {currentQuestion.questionType && (
@@ -343,6 +419,30 @@ export default function QuestionPanel({
       
       {/* 底部导航 */}
       <div className="p-4 border-t bg-gray-50 flex-shrink-0">
+        {/* 标记模式颜色选择器 */}
+        {textMark?.isMarkMode && (
+          <div className="flex items-center gap-2 mb-3 pb-3 border-b">
+            <span className="text-xs text-gray-500">标记颜色：</span>
+            {Object.entries(MARK_COLORS).map(([key, color]) => (
+              <button
+                key={key}
+                className={`w-6 h-6 rounded-full border-2 transition-all ${
+                  textMark.currentColor === key ? 'ring-2 ring-offset-1 ring-gray-400 scale-110' : ''
+                }`}
+                style={{ 
+                  background: color.bg,
+                  borderColor: color.border,
+                }}
+                onClick={() => textMark.setCurrentColor(key as MarkColorType)}
+                title={`${color.name} (按 ${Object.keys(MARK_COLORS).indexOf(key) + 1})`}
+              />
+            ))}
+            <span className="text-xs text-gray-400 ml-2">
+              当前: {MARK_COLORS[textMark.currentColor].name}
+            </span>
+          </div>
+        )}
+        
         <div className="flex items-center justify-between">
           <Button
             variant="outline"

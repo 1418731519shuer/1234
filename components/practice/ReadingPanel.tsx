@@ -13,7 +13,7 @@ import {
   BookPlus,
   X
 } from 'lucide-react'
-import { useTextMark, MARK_COLOR, TextMark } from '@/hooks/useTextMark'
+import { useTextMark, MARK_COLORS, TextMark, MarkColorType } from '@/hooks/useTextMark'
 
 interface ReadingPanelProps {
   content: string
@@ -304,12 +304,13 @@ export default function ReadingPanel({
           <span key={`tm-text-${i}`}>{text.slice(lastIndex, markStart)}</span>
         )
       }
-      // 标记部分
+      // 标记部分 - 使用标记的颜色
+      const colorStyle = textMark.getMarkColorStyle(mark.color)
       elements.push(
         <span
           key={`tm-mark-${mark.id}`}
           className="cursor-pointer rounded px-0.5"
-          style={{ background: MARK_COLOR }}
+          style={{ background: colorStyle.bg }}
           onClick={(e) => handleArticleMarkClick(mark, e)}
           title="点击删除标记"
         >
@@ -668,6 +669,32 @@ export default function ReadingPanel({
           borderColor: eyeCareMode ? '#A5D6A7' : '#e5e7eb'
         }}
       >
+        {/* textMark 标记模式的颜色选择器 */}
+        {textMark?.isMarkMode && (
+          <div className="flex items-center gap-2 mb-2 pb-2 border-b" style={{ borderColor: eyeCareMode ? '#A5D6A7' : '#e5e7eb' }}>
+            <span className="text-xs" style={{ color: eyeCareMode ? '#558B2F' : '#6b7280' }}>
+              标记颜色：
+            </span>
+            {Object.entries(MARK_COLORS).map(([key, color]) => (
+              <button
+                key={key}
+                className={`w-6 h-6 rounded-full border-2 transition-all ${
+                  textMark.currentColor === key ? 'ring-2 ring-offset-1 ring-gray-400 scale-110' : ''
+                }`}
+                style={{ 
+                  background: color.bg,
+                  borderColor: color.border,
+                }}
+                onClick={() => textMark.setCurrentColor(key as MarkColorType)}
+                title={`${color.name} (按 ${Object.keys(MARK_COLORS).indexOf(key) + 1})`}
+              />
+            ))}
+            <span className="text-xs ml-2" style={{ color: eyeCareMode ? '#689F38' : '#9ca3af' }}>
+              当前: {MARK_COLORS[textMark.currentColor].name}
+            </span>
+          </div>
+        )}
+        
         <div className="flex items-center justify-between">
           <div 
             className="flex items-center gap-4 text-sm"
@@ -675,26 +702,54 @@ export default function ReadingPanel({
           >
             <span className="flex items-center gap-1">
               <Highlighter className="w-4 h-4" />
-              {isMarkingMode ? '滑过文本标记' : '仅阅读模式'}
+              {textMark?.isMarkMode ? '标记模式 - 选择文本标记' : isMarkingMode ? '滑过文本标记' : '仅阅读模式'}
             </span>
             <span style={{ color: eyeCareMode ? '#81C784' : '#d1d5db' }}>|</span>
-            <span>快捷键: 1-4 切换颜色 | Backspace 删除</span>
+            <span>快捷键: Shift切换模式 | 1-4 切换颜色</span>
           </div>
           <div className="flex items-center gap-2">
-            {COLORS.map((color) => {
-              const count = highlights.filter(h => h.color === color.id).length
-              return (
-                <div key={color.id} className="flex items-center gap-1">
-                  <div className={`w-3 h-3 rounded-full ${color.mark} border ${color.border}`} />
-                  <span 
-                    className="text-xs"
-                    style={{ color: eyeCareMode ? '#689F38' : '#6b7280' }}
-                  >
-                    {count}
-                  </span>
-                </div>
-              )
-            })}
+            {textMark?.marks && textMark.marks.length > 0 ? (
+              <div className="flex items-center gap-2">
+                {Object.entries(MARK_COLORS).map(([key, color]) => {
+                  const count = textMark.marks.filter(m => m.color === key).length
+                  return (
+                    <div key={key} className="flex items-center gap-1">
+                      <div 
+                        className="w-3 h-3 rounded-full border"
+                        style={{ background: color.bg, borderColor: color.border }}
+                      />
+                      <span 
+                        className="text-xs"
+                        style={{ color: eyeCareMode ? '#689F38' : '#6b7280' }}
+                      >
+                        {count}
+                      </span>
+                    </div>
+                  )
+                })}
+                <button
+                  className="text-xs text-red-500 hover:text-red-600 ml-2"
+                  onClick={() => textMark.clearAllMarks()}
+                >
+                  清除
+                </button>
+              </div>
+            ) : (
+              COLORS.map((color) => {
+                const count = highlights.filter(h => h.color === color.id).length
+                return (
+                  <div key={color.id} className="flex items-center gap-1">
+                    <div className={`w-3 h-3 rounded-full ${color.mark} border ${color.border}`} />
+                    <span 
+                      className="text-xs"
+                      style={{ color: eyeCareMode ? '#689F38' : '#6b7280' }}
+                    >
+                      {count}
+                    </span>
+                  </div>
+                )
+              })
+            )}
           </div>
         </div>
       </div>
