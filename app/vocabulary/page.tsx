@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
+import { Checkbox } from '@/components/ui/checkbox'
 import { 
   Home, 
   Search, 
@@ -13,7 +14,8 @@ import {
   Trash2, 
   Volume2,
   Clock,
-  TrendingUp
+  TrendingUp,
+  X
 } from 'lucide-react'
 
 interface VocabularyItem {
@@ -34,6 +36,8 @@ export default function VocabularyPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [filter, setFilter] = useState<'all' | 'favorites'>('all')
   const [selectedWord, setSelectedWord] = useState<VocabularyItem | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [isDeleteMode, setIsDeleteMode] = useState(false)
   
   useEffect(() => {
     fetchVocabularies()
@@ -62,14 +66,8 @@ export default function VocabularyPage() {
         body: JSON.stringify({ word, isFavorite: !currentStatus }),
       })
       
-      // 更新本地状态
-      setVocabularies(prev => 
-        prev.map(v => v.word === word ? { ...v, isFavorite: !currentStatus } : v)
-      )
-      
-      if (selectedWord?.word === word) {
-        setSelectedWord(prev => prev ? { ...prev, isFavorite: !currentStatus } : null)
-      }
+      // 重新获取数据以更新计数
+      fetchVocabularies()
     } catch (error) {
       console.error('Toggle favorite error:', error)
     }
@@ -82,6 +80,58 @@ export default function VocabularyPage() {
       setSelectedWord(null)
     } catch (error) {
       console.error('Delete vocabulary error:', error)
+    }
+  }
+  
+  // 批量删除
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredVocabularies.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(filteredVocabularies.map(v => v.id)))
+    }
+  }
+  
+  const toggleSelect = (id: string) => {
+    const newSet = new Set(selectedIds)
+    if (newSet.has(id)) {
+      newSet.delete(id)
+    } else {
+      newSet.add(id)
+    }
+    setSelectedIds(newSet)
+  }
+  
+  const deleteSelected = async () => {
+    if (selectedIds.size === 0) return
+    try {
+      await fetch('/api/vocabulary', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(selectedIds) }),
+      })
+      setVocabularies(prev => prev.filter(v => !selectedIds.has(v.id)))
+      setSelectedIds(new Set())
+      setIsDeleteMode(false)
+    } catch (error) {
+      console.error('Batch delete error:', error)
+    }
+  }
+  
+  const deleteAll = async () => {
+    if (!confirm('确定要删除全部词汇吗？此操作不可恢复。')) return
+    try {
+      const allIds = vocabularies.map(v => v.id)
+      await fetch('/api/vocabulary', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: allIds }),
+      })
+      setVocabularies([])
+      setSelectedIds(new Set())
+      setIsDeleteMode(false)
+    } catch (error) {
+      console.error('Delete all error:', error)
     }
   }
   
@@ -169,6 +219,57 @@ export default function VocabularyPage() {
               />
             </div>
             
+            {/* 操作按钮 */}
+            <div className="flex items-center gap-2">
+              {isDeleteMode ? (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { setIsDeleteMode(false); setSelectedIds(new Set()) }}
+                  >
+                    <X className="w-4 h-4 mr-1" />
+                    取消
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={toggleSelectAll}
+                    disabled={filteredVocabularies.length === 0}
+                  >
+                    {selectedIds.size === filteredVocabularies.length ? '取消全选' : '全选'}
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={deleteSelected}
+                    disabled={selectedIds.size === 0}
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    删除 ({selectedIds.size})
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={deleteAll}
+                    disabled={vocabularies.length === 0}
+                  >
+                    全部删除
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsDeleteMode(true)}
+                  disabled={vocabularies.length === 0}
+                >
+                  <Trash2 className="w-4 h-4 mr-1" />
+                  批量删除
+                </Button>
+              )}
+            </div>
+            
             {/* 统计卡片 */}
             <div className="flex items-center gap-4 ml-auto">
               <div className="text-center">
@@ -206,10 +307,27 @@ export default function VocabularyPage() {
               {filteredVocabularies.map((vocab) => (
                 <div
                   key={vocab.id}
-                  className="rounded-xl p-4 cursor-pointer transition-all hover:shadow-md border"
-                  style={{ background: 'var(--bg)', borderColor: 'var(--bd)' }}
-                  onClick={() => setSelectedWord(vocab)}
+                  className="rounded-xl p-4 cursor-pointer transition-all hover:shadow-md border relative"
+                  style={{ 
+                    background: selectedIds.has(vocab.id) ? 'var(--m1)' : 'var(--bg)', 
+                    borderColor: selectedIds.has(vocab.id) ? 'var(--m)' : 'var(--bd)' 
+                  }}
+                  onClick={() => {
+                    if (isDeleteMode) {
+                      toggleSelect(vocab.id)
+                    } else {
+                      setSelectedWord(vocab)
+                    }
+                  }}
                 >
+                  {isDeleteMode && (
+                    <div className="absolute top-3 right-3">
+                      <Checkbox 
+                        checked={selectedIds.has(vocab.id)}
+                        onCheckedChange={() => toggleSelect(vocab.id)}
+                      />
+                    </div>
+                  )}
                   <div className="flex items-start justify-between mb-2">
                     <div>
                       <span className="font-bold text-lg" style={{ color: 'var(--tx)' }}>{vocab.word}</span>
@@ -217,19 +335,21 @@ export default function VocabularyPage() {
                         <span className="ml-2 text-sm" style={{ color: 'var(--tx3)' }}>/{vocab.phonetic}/</span>
                       )}
                     </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        toggleFavorite(vocab.word, vocab.isFavorite)
-                      }}
-                      className="p-1 rounded hover:bg-gray-100"
-                    >
-                      <Star 
-                        className="w-5 h-5" 
-                        style={{ color: vocab.isFavorite ? '#f59e0b' : 'var(--tx3)' }}
-                        fill={vocab.isFavorite ? '#f59e0b' : 'none'}
-                      />
-                    </button>
+                    {!isDeleteMode && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          toggleFavorite(vocab.word, vocab.isFavorite)
+                        }}
+                        className="p-1 rounded hover:bg-gray-100"
+                      >
+                        <Star 
+                          className="w-5 h-5" 
+                          style={{ color: vocab.isFavorite ? '#f59e0b' : 'var(--tx3)' }}
+                          fill={vocab.isFavorite ? '#f59e0b' : 'none'}
+                        />
+                      </button>
+                    )}
                   </div>
                   
                   {vocab.pos && (

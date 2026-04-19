@@ -123,6 +123,7 @@ export default function ClozePanel({
       
       const answer = answers[blankNum]
       const blank = blanks.find(b => b.blankNum === blankNum)
+      const answerWord = answer && blank ? blank.options[answer as keyof typeof blank.options] : null
       const isCorrect = isSubmitted && blank && answer === blank.correctAnswer
       const isWrong = isSubmitted && blank && answer && answer !== blank.correctAnswer
       const isCurrent = currentBlank === blankNum
@@ -146,7 +147,7 @@ export default function ClozePanel({
               boxShadow: isCurrent ? '0 0 0 2px rgba(59, 130, 246, 0.3)' : 'none',
             }}
           >
-            {answer || `[${blankNum}]`}
+            {answerWord || `[${blankNum}]`}
           </span>
         </span>
       )
@@ -364,6 +365,7 @@ export default function ClozePanel({
         <div className="flex items-center gap-1 flex-wrap">
           {blanks.sort((a, b) => a.blankNum - b.blankNum).map(blank => {
             const answer = answers[blank.blankNum]
+            const answerWord = answer ? blank.options[answer as keyof typeof blank.options] : null
             const isCorrect = isSubmitted && answer === blank.correctAnswer
             const isWrong = isSubmitted && answer && answer !== blank.correctAnswer
             const isCurrent = currentBlank === blank.blankNum
@@ -384,7 +386,7 @@ export default function ClozePanel({
                 onClick={() => !isSubmitted && onSelectBlank(blank.blankNum)}
               >
                 <span className="opacity-60">{blank.blankNum}.</span>
-                <span>{answer || '_'}</span>
+                <span>{answerWord || '_'}</span>
               </div>
             )
           })}

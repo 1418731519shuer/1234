@@ -58,12 +58,25 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// DELETE /api/vocabulary - 删除词汇
+// DELETE /api/vocabulary - 删除词汇（支持单个和批量）
 export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
     
+    // 检查是否是批量删除（通过body传递ids数组）
+    const contentType = request.headers.get('content-type')
+    if (contentType?.includes('application/json')) {
+      const body = await request.json()
+      if (body.ids && Array.isArray(body.ids) && body.ids.length > 0) {
+        await prisma.vocabulary.deleteMany({
+          where: { id: { in: body.ids } },
+        })
+        return NextResponse.json({ success: true, count: body.ids.length })
+      }
+    }
+    
+    // 单个删除
     if (!id) {
       return NextResponse.json({ error: '缺少词汇ID' }, { status: 400 })
     }
