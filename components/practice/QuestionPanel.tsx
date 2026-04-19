@@ -369,16 +369,31 @@ export default function QuestionPanel({
                       ${!isSubmitted && !textMark?.isMarkMode && 'hover:bg-gray-50 cursor-pointer'}
                       ${textMark?.isMarkMode ? 'cursor-text' : ''}
                     `}
+                    onClick={(e) => {
+                      // 标记模式下阻止点击选择选项
+                      if (textMark?.isMarkMode) {
+                        e.preventDefault()
+                        e.stopPropagation()
+                      }
+                    }}
                   >
                     <RadioGroupItem value={option.optionKey} id={option.id} />
                     <Label 
                       htmlFor={option.id} 
-                      className={`flex-1 ${textMark?.isMarkMode ? '' : 'cursor-pointer'} ${isSubmitted && isCorrectOption ? 'font-medium text-green-700' : ''}`}
+                      className={`flex-1 ${textMark?.isMarkMode ? 'cursor-text' : 'cursor-pointer'} ${isSubmitted && isCorrectOption ? 'font-medium text-green-700' : ''}`}
+                      onClick={(e) => {
+                        // 标记模式下阻止 Label 触发 RadioGroupItem
+                        if (textMark?.isMarkMode) {
+                          e.preventDefault()
+                          e.stopPropagation()
+                        }
+                      }}
                     >
                       <span className="font-medium mr-2">{option.optionKey}.</span>
                       <span
                         ref={(el) => { if (el) optionRefs.current[refKey] = el }}
                         onMouseUp={(e) => handleOptionMouseUp(currentQuestion.id, option.optionKey, e)}
+                        className={textMark?.isMarkMode ? 'select-text' : ''}
                       >
                         {renderMarkedOption(currentQuestion.id, option.optionKey, option.content)}
                       </span>
