@@ -232,13 +232,13 @@ export default function WritingPanel({
       
       // 解析格式标记
       if (text.startsWith('>>')) {
-        cleanText = text.slice(2).trim()
+        cleanText = text.slice(2) // 保留原始空格，不trim
         align = 'right'
       } else if (text.startsWith('><')) {
-        cleanText = text.slice(2).trim()
+        cleanText = text.slice(2)
         align = 'center'
       } else if (text.startsWith('>')) {
-        cleanText = text.slice(1).trim()
+        cleanText = text.slice(1)
         indent = 2
       }
       
@@ -310,23 +310,20 @@ export default function WritingPanel({
     const lines = userAnswer.split('\n')
     const line = lines[index]
     
-    // 解析当前格式
-    let align: 'left' | 'right' | 'center' = 'left'
+    // 解析当前格式，保留原始空格
     let cleanText = line
     
     if (line.startsWith('>>')) {
-      cleanText = line.slice(2).trim()
-      align = 'right'
+      cleanText = line.slice(2)
     } else if (line.startsWith('><')) {
-      cleanText = line.slice(2).trim()
-      align = 'center'
+      cleanText = line.slice(2)
     } else if (line.startsWith('>')) {
-      cleanText = line.slice(1).trim()
+      cleanText = line.slice(1)
     }
     
     // 应用新格式
     let prefix = ''
-    const newAlign = format.align || align
+    const newAlign = format.align
     
     if (newAlign === 'right') {
       prefix = '>>'
