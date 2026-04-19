@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { CheckCircle2, XCircle } from 'lucide-react'
+import { useTextMark, MARK_COLOR, TextMark } from '@/hooks/useTextMark'
 
 interface ClozeBlank {
   blankNum: number
@@ -26,6 +27,7 @@ interface ClozeQuestionPanelProps {
   onSubmit: () => void
   isSubmitted: boolean
   onAskAI?: (question: string) => void
+  textMark?: ReturnType<typeof useTextMark>
 }
 
 // 选项颜色
@@ -45,14 +47,89 @@ export default function ClozeQuestionPanel({
   onSubmit,
   isSubmitted,
   onAskAI,
+  textMark,
 }: ClozeQuestionPanelProps) {
   const currentBlankData = currentBlank ? blanks.find(b => b.blankNum === currentBlank) : null
   const currentAnswer = currentBlank ? answers[currentBlank] : null
+  const optionRefs = useRef<Record<string, HTMLSpanElement>>({})
   
   // 选择选项
   const handleSelectOption = (optionKey: string) => {
     if (isSubmitted || !currentBlank) return
+    if (textMark?.isMarkMode) return // 标记模式下不选择
     onAnswer(currentBlank, optionKey)
+  }
+  
+  // 处理选项文本选择（标记模式）
+  const handleOptionMouseUp = useCallback((blankNum: number, optionKey: string, e: React.MouseEvent) => {
+    if (!textMark?.isMarkMode || isSubmitted) return
+    
+    const selection = window.getSelection()
+    if (!selection || selection.isCollapsed) return
+    
+    const selectedText = selection.toString().trim()
+    if (!selectedText) return
+    
+    const refKey = `cloze-${blankNum}-${optionKey}`
+    const container = optionRefs.current[refKey]
+    if (!container) return
+    
+    const range = selection.getRangeAt(0)
+    
+    const preSelectionRange = document.createRange()
+    preSelectionRange.selectNodeContents(container)
+    preSelectionRange.setEnd(range.startContainer, range.startOffset)
+    const start = preSelectionRange.toString().length
+    
+    const end = start + selectedText.length
+    
+    textMark.addMark('option', selectedText, start, end, refKey)
+    selection.removeAllRanges()
+  }, [textMark, isSubmitted])
+  
+  // 点击标记删除
+  const handleMarkClick = useCallback((mark: TextMark, e: React.MouseEvent) => {
+    e.stopPropagation()
+    textMark?.removeMark(mark.id)
+  }, [textMark])
+  
+  // 渲染带标记的选项内容
+  const renderMarkedOption = (blankNum: number, optionKey: string, content: string) => {
+    const refKey = `cloze-${blankNum}-${optionKey}`
+    
+    if (!textMark) return <span>{content}</span>
+    
+    const optionMarks = textMark.getMarks('option', refKey)
+    if (optionMarks.length === 0) return <span>{content}</span>
+    
+    const elements: React.ReactNode[] = []
+    let lastIndex = 0
+    
+    optionMarks.forEach((mark, i) => {
+      if (mark.start > lastIndex) {
+        elements.push(
+          <span key={`text-${i}`}>{content.slice(lastIndex, mark.start)}</span>
+        )
+      }
+      elements.push(
+        <span
+          key={`mark-${mark.id}`}
+          className="cursor-pointer rounded px-0.5"
+          style={{ background: MARK_COLOR }}
+          onClick={(e) => handleMarkClick(mark, e)}
+          title="点击删除标记"
+        >
+          {content.slice(mark.start, mark.end)}
+        </span>
+      )
+      lastIndex = mark.end
+    })
+    
+    if (lastIndex < content.length) {
+      elements.push(<span key="text-end">{content.slice(lastIndex)}</span>)
+    }
+    
+    return elements
   }
   
   // 计算统计
@@ -114,11 +191,13 @@ export default function ClozeQuestionPanel({
                 const isSelected = currentAnswer === opt
                 const isCorrectOption = isSubmitted && currentBlankData.correctAnswer === opt
                 const colorStyle = OPTION_COLORS[opt]
+                const refKey = `cloze-${currentBlankData.blankNum}-${opt}`
+                const optionMarkCount = textMark?.getMarkCount('option', refKey) || 0
                 
                 return (
-                  <button
+                  <div
                     key={opt}
-                    className="w-full text-left p-3 rounded-lg border-2 transition-all flex items-start gap-2"
+                    className="w-full text-left p-3 rounded-lg border-2 transition-all flex items-start gap-2 relative"
                     style={{
                       background: isSubmitted 
                         ? (isCorrectOption ? '#d1fae5' : isSelected ? '#fee2e2' : '#ffffff')
@@ -126,9 +205,9 @@ export default function ClozeQuestionPanel({
                       borderColor: isSubmitted 
                         ? (isCorrectOption ? '#10b981' : isSelected ? '#ef4444' : '#e5e7eb')
                         : isSelected ? colorStyle.border : '#e5e7eb',
+                      cursor: textMark?.isMarkMode ? 'text' : 'pointer',
                     }}
                     onClick={() => handleSelectOption(opt)}
-                    disabled={isSubmitted}
                   >
                     <span 
                       className="w-6 h-6 rounded flex items-center justify-center text-xs font-bold flex-shrink-0 text-white"
@@ -137,18 +216,32 @@ export default function ClozeQuestionPanel({
                       {opt}
                     </span>
                     <span 
+                      ref={(el) => { if (el) optionRefs.current[refKey] = el }}
                       className="text-sm leading-relaxed flex-1"
                       style={{ color: isSelected || isCorrectOption ? colorStyle.text : '#374151' }}
+                      onMouseUp={(e) => handleOptionMouseUp(currentBlankData.blankNum, opt, e)}
                     >
-                      {currentBlankData.options[opt]}
+                      {renderMarkedOption(currentBlankData.blankNum, opt, currentBlankData.options[opt])}
                     </span>
+                    {optionMarkCount > 0 && !isSubmitted && (
+                      <span 
+                        className="text-xs px-1.5 py-0.5 rounded-full bg-yellow-100 text-yellow-700 cursor-pointer hover:bg-yellow-200"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          textMark?.clearRegionMarks('option', refKey)
+                        }}
+                        title="点击清除标记"
+                      >
+                        {optionMarkCount} 标记
+                      </span>
+                    )}
                     {isSubmitted && isCorrectOption && (
                       <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
                     )}
                     {isSubmitted && isSelected && !isCorrectOption && (
                       <XCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
                     )}
-                  </button>
+                  </div>
                 )
               })}
             </div>

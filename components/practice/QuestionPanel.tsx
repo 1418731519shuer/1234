@@ -62,7 +62,7 @@ export default function QuestionPanel({
   textMark,
 }: QuestionPanelProps) {
   const [elapsedTime, setElapsedTime] = useState(0)
-  const optionRefs = useRef<Record<string, HTMLDivElement>>({})
+  const optionRefs = useRef<Record<string, HTMLSpanElement>>({})
   
   // 计时器
   useEffect(() => {
@@ -96,7 +96,7 @@ export default function QuestionPanel({
   }
   
   // 处理选项文本选择（标记模式）
-  const handleOptionMouseUp = useCallback((optionKey: string, e: React.MouseEvent) => {
+  const handleOptionMouseUp = useCallback((questionId: string, optionKey: string, e: React.MouseEvent) => {
     if (!textMark?.isMarkMode || isSubmitted) return
     
     const selection = window.getSelection()
@@ -105,7 +105,8 @@ export default function QuestionPanel({
     const selectedText = selection.toString().trim()
     if (!selectedText) return
     
-    const container = optionRefs.current[optionKey]
+    const refKey = `${questionId}-${optionKey}`
+    const container = optionRefs.current[refKey]
     if (!container) return
     
     const range = selection.getRangeAt(0)
@@ -118,7 +119,7 @@ export default function QuestionPanel({
     
     const end = start + selectedText.length
     
-    textMark.addMark('option', selectedText, start, end, optionKey)
+    textMark.addMark('option', selectedText, start, end, refKey)
     selection.removeAllRanges()
   }, [textMark, isSubmitted])
   
@@ -129,10 +130,12 @@ export default function QuestionPanel({
   }, [textMark])
   
   // 渲染带标记的选项内容
-  const renderMarkedOption = (optionKey: string, content: string) => {
+  const renderMarkedOption = (questionId: string, optionKey: string, content: string) => {
+    const refKey = `${questionId}-${optionKey}`
+    
     if (!textMark) return <span>{content}</span>
     
-    const optionMarks = textMark.getMarks('option', optionKey)
+    const optionMarks = textMark.getMarks('option', refKey)
     if (optionMarks.length === 0) return <span>{content}</span>
     
     const elements: React.ReactNode[] = []
@@ -267,7 +270,8 @@ export default function QuestionPanel({
               {currentQuestion.options.map((option) => {
                 const isSelected = answers[currentQuestion.id] === option.optionKey
                 const isCorrectOption = option.optionKey === currentQuestion.correctAnswer
-                const optionMarkCount = textMark?.getMarkCount('option', option.optionKey) || 0
+                const refKey = `${currentQuestion.id}-${option.optionKey}`
+                const optionMarkCount = textMark?.getMarkCount('option', refKey) || 0
                 
                 let optionClass = 'border-gray-200'
                 if (isSubmitted) {
@@ -283,14 +287,12 @@ export default function QuestionPanel({
                 return (
                   <div
                     key={option.id}
-                    ref={(el) => { if (el) optionRefs.current[option.optionKey] = el }}
                     className={`
                       flex items-center space-x-3 p-3 rounded-lg border-2 transition-all relative
                       ${optionClass}
                       ${!isSubmitted && !textMark?.isMarkMode && 'hover:bg-gray-50 cursor-pointer'}
                       ${textMark?.isMarkMode ? 'cursor-text' : ''}
                     `}
-                    onMouseUp={(e) => handleOptionMouseUp(option.optionKey, e)}
                   >
                     <RadioGroupItem value={option.optionKey} id={option.id} />
                     <Label 
@@ -298,14 +300,19 @@ export default function QuestionPanel({
                       className={`flex-1 ${textMark?.isMarkMode ? '' : 'cursor-pointer'} ${isSubmitted && isCorrectOption ? 'font-medium text-green-700' : ''}`}
                     >
                       <span className="font-medium mr-2">{option.optionKey}.</span>
-                      {renderMarkedOption(option.optionKey, option.content)}
+                      <span
+                        ref={(el) => { if (el) optionRefs.current[refKey] = el }}
+                        onMouseUp={(e) => handleOptionMouseUp(currentQuestion.id, option.optionKey, e)}
+                      >
+                        {renderMarkedOption(currentQuestion.id, option.optionKey, option.content)}
+                      </span>
                     </Label>
                     {optionMarkCount > 0 && !isSubmitted && (
                       <span 
                         className="text-xs px-1.5 py-0.5 rounded-full bg-yellow-100 text-yellow-700 cursor-pointer hover:bg-yellow-200"
                         onClick={(e) => {
                           e.stopPropagation()
-                          textMark?.clearRegionMarks('option', option.optionKey)
+                          textMark?.clearRegionMarks('option', refKey)
                         }}
                         title="点击清除标记"
                       >

@@ -47,6 +47,7 @@ export default function SevenFiveQuestionPanel({
 }: SevenFiveQuestionPanelProps) {
   const [errorMsg, setErrorMsg] = useState('')
   const containerRef = useRef<HTMLDivElement>(null)
+  const optionContentRefs = useRef<Record<string, HTMLSpanElement>>({})
   
   const currentBlank = blanks[currentIndex]
   const currentAnswer = currentBlank ? answers[currentBlank] : null
@@ -102,8 +103,10 @@ export default function SevenFiveQuestionPanel({
     const selectedText = selection.toString().trim()
     if (!selectedText) return
     
+    const container = optionContentRefs.current[optionKey]
+    if (!container) return
+    
     const range = selection.getRangeAt(0)
-    const container = e.currentTarget
     
     // 获取选中文本在容器内的位置
     const preSelectionRange = document.createRange()
@@ -297,7 +300,6 @@ export default function SevenFiveQuestionPanel({
                   cursor: textMark?.isMarkMode ? 'text' : 'pointer',
                 }}
                 onClick={() => !isSubmitted && !textMark?.isMarkMode && handleSelectOption(opt.key)}
-                onMouseUp={(e) => handleOptionMouseUp(opt.key, e)}
               >
                 <div className="flex items-start gap-2">
                   <span 
@@ -307,8 +309,10 @@ export default function SevenFiveQuestionPanel({
                     {opt.key}
                   </span>
                   <span 
+                    ref={(el) => { if (el) optionContentRefs.current[opt.key] = el }}
                     className="text-sm leading-relaxed flex-1"
                     style={{ color: isSelected || isCorrectOption ? colorStyle?.text : '#374151' }}
+                    onMouseUp={(e) => handleOptionMouseUp(opt.key, e)}
                   >
                     {renderMarkedContent(opt.key, opt.content.length > 150 ? opt.content.slice(0, 150) + '...' : opt.content)}
                   </span>

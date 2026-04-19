@@ -7,7 +7,8 @@ import ClozeQuestionPanel from '@/components/practice/ClozeQuestionPanel'
 import AIChatPanel from '@/components/practice/AIChatPanel'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Home, Loader2 } from 'lucide-react'
+import { Home, Loader2, Highlighter, MousePointer } from 'lucide-react'
+import { useTextMark } from '@/hooks/useTextMark'
 
 interface ClozeBlank {
   blankNum: number
@@ -54,6 +55,9 @@ export default function ClozePracticePage({ params }: { params: Promise<{ id: st
   const [startTime] = useState(new Date())
   const [practiceId, setPracticeId] = useState<string>('')
   const [aiQuestion, setAiQuestion] = useState<string>('')
+  
+  // 标记功能
+  const textMark = useTextMark(isSubmitted)
   
   useEffect(() => {
     const fetchArticle = async () => {
@@ -187,6 +191,30 @@ export default function ClozePracticePage({ params }: { params: Promise<{ id: st
             <h1 className="font-medium text-slate-700 truncate max-w-lg">{article.title}</h1>
           </div>
           <div className="flex items-center gap-3">
+            {/* 模式切换 */}
+            {!isSubmitted && (
+              <div 
+                className="flex items-center gap-1 px-3 py-1.5 rounded-full text-sm cursor-pointer transition-all border"
+                style={{ 
+                  background: textMark.isMarkMode ? '#fef08a' : '#f1f5f9',
+                  borderColor: textMark.isMarkMode ? '#facc15' : '#e2e8f0',
+                  color: textMark.isMarkMode ? '#854d0e' : '#64748b'
+                }}
+                onClick={() => textMark.setIsMarkMode(!textMark.isMarkMode)}
+              >
+                {textMark.isMarkMode ? (
+                  <>
+                    <Highlighter className="w-4 h-4" />
+                    <span>标记模式</span>
+                  </>
+                ) : (
+                  <>
+                    <MousePointer className="w-4 h-4" />
+                    <span>答题模式</span>
+                  </>
+                )}
+              </div>
+            )}
             <Badge variant="outline" className="text-sm">完型填空</Badge>
             {isSubmitted && (
               <Badge className={`${correctCount >= 12 ? 'bg-emerald-500' : 'bg-red-400'} text-white text-sm`}>
@@ -195,10 +223,19 @@ export default function ClozePracticePage({ params }: { params: Promise<{ id: st
             )}
           </div>
         </div>
+        {/* 模式提示 */}
+        {!isSubmitted && (
+          <div className="max-w-7xl mx-auto mt-1">
+            <span className="text-xs text-slate-400">
+              按 <kbd className="px-1 py-0.5 bg-slate-100 rounded text-slate-500">Shift</kbd> 切换 {textMark.isMarkMode ? '答题' : '标记'}模式
+              {textMark.marks.length > 0 && ` · 已标记 ${textMark.marks.length} 处`}
+            </span>
+          </div>
+        )}
       </div>
       
       {/* 主内容区 - 三栏布局 */}
-      <div className="flex" style={{ height: 'calc(100vh - 57px)' }}>
+      <div className="flex" style={{ height: 'calc(100vh - 75px)' }}>
         {/* 左侧文章 - 50% */}
         <div 
           className="border-r border-slate-200"
@@ -213,6 +250,7 @@ export default function ClozePracticePage({ params }: { params: Promise<{ id: st
             onSelectBlank={handleSelectBlank}
             isSubmitted={isSubmitted}
             articleId={article.id}
+            textMark={textMark}
           />
         </div>
         
@@ -230,6 +268,7 @@ export default function ClozePracticePage({ params }: { params: Promise<{ id: st
             onSubmit={handleSubmit}
             isSubmitted={isSubmitted}
             onAskAI={handleAskAI}
+            textMark={textMark}
           />
         </div>
         

@@ -4,6 +4,7 @@ import { useState, useCallback, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Sun, Moon, BookPlus, X, Loader2 } from 'lucide-react'
+import { useTextMark, MARK_COLOR, TextMark } from '@/hooks/useTextMark'
 
 interface ClozeBlank {
   blankNum: number
@@ -26,6 +27,7 @@ interface ClozePanelProps {
   onSelectBlank: (blankNum: number) => void
   isSubmitted: boolean
   articleId?: string
+  textMark?: ReturnType<typeof useTextMark>
 }
 
 // 护眼模式颜色
@@ -45,6 +47,7 @@ export default function ClozePanel({
   onSelectBlank,
   isSubmitted,
   articleId,
+  textMark,
 }: ClozePanelProps) {
   const [eyeCareMode, setEyeCareMode] = useState(true)
   const contentRef = useRef<HTMLDivElement>(null)
@@ -57,6 +60,87 @@ export default function ClozePanel({
   const [isLoadingMeaning, setIsLoadingMeaning] = useState(false)
   const [popupPosition, setPopupPosition] = useState({ x: 0, y: 0 })
   const [addedWords, setAddedWords] = useState<Set<string>>(new Set())
+  
+  // 处理文章区域的文本选择（标记模式）
+  const handleArticleMouseUp = useCallback((e: React.MouseEvent) => {
+    if (!textMark?.isMarkMode) return
+    
+    const selection = window.getSelection()
+    if (!selection || selection.isCollapsed) return
+    
+    const selectedText = selection.toString().trim()
+    if (!selectedText) return
+    
+    const range = selection.getRangeAt(0)
+    const container = contentRef.current
+    if (!container) return
+    
+    // 获取选中文本在容器内的位置
+    const preSelectionRange = document.createRange()
+    preSelectionRange.selectNodeContents(container)
+    preSelectionRange.setEnd(range.startContainer, range.startOffset)
+    const start = preSelectionRange.toString().length
+    
+    const end = start + selectedText.length
+    
+    textMark.addMark('article', selectedText, start, end)
+    selection.removeAllRanges()
+  }, [textMark])
+  
+  // 点击文章中的标记删除
+  const handleArticleMarkClick = useCallback((mark: TextMark, e: React.MouseEvent) => {
+    e.stopPropagation()
+    textMark?.removeMark(mark.id)
+  }, [textMark])
+  
+  // 渲染带标记的文本
+  const renderTextMarkedText = (text: string, globalOffset: number) => {
+    if (!textMark) return <span>{text}</span>
+    
+    const articleMarks = textMark.getMarks('article')
+    if (articleMarks.length === 0) return <span>{text}</span>
+    
+    const textStart = globalOffset
+    const textEnd = globalOffset + text.length
+    
+    const relevantMarks = articleMarks.filter(m => 
+      m.start < textEnd && m.end > textStart
+    )
+    
+    if (relevantMarks.length === 0) return <span>{text}</span>
+    
+    const elements: React.ReactNode[] = []
+    let lastIndex = 0
+    
+    relevantMarks.forEach((mark, i) => {
+      const markStart = Math.max(0, mark.start - textStart)
+      const markEnd = Math.min(text.length, mark.end - textStart)
+      
+      if (markStart > lastIndex) {
+        elements.push(
+          <span key={`tm-text-${i}`}>{text.slice(lastIndex, markStart)}</span>
+        )
+      }
+      elements.push(
+        <span
+          key={`tm-mark-${mark.id}`}
+          className="cursor-pointer rounded px-0.5"
+          style={{ background: MARK_COLOR }}
+          onClick={(e) => handleArticleMarkClick(mark, e)}
+          title="点击删除标记"
+        >
+          {text.slice(markStart, markEnd)}
+        </span>
+      )
+      lastIndex = markEnd
+    })
+    
+    if (lastIndex < text.length) {
+      elements.push(<span key="tm-text-end">{text.slice(lastIndex)}</span>)
+    }
+    
+    return elements
+  }
   
   // 处理单词点击
   const handleWordClick = useCallback(async (word: string, e: React.MouseEvent) => {
@@ -114,10 +198,13 @@ export default function ClozePanel({
       const matchStart = match.index
       const matchEnd = matchStart + match[0].length
       
-      // 添加前面的文本
+      // 添加前面的文本（带 textMark 标记）
       if (matchStart > lastIndex) {
+        const textBefore = content.slice(lastIndex, matchStart)
         elements.push(
-          <span key={`text-${lastIndex}`}>{content.slice(lastIndex, matchStart)}</span>
+          <span key={`text-${lastIndex}`}>
+            {renderTextMarkedText(textBefore, lastIndex)}
+          </span>
         )
       }
       
@@ -155,10 +242,13 @@ export default function ClozePanel({
       lastIndex = matchEnd
     }
     
-    // 添加剩余文本
+    // 添加剩余文本（带 textMark 标记）
     if (lastIndex < content.length) {
+      const textAfter = content.slice(lastIndex)
       elements.push(
-        <span key={`text-end`}>{content.slice(lastIndex)}</span>
+        <span key={`text-end`}>
+          {renderTextMarkedText(textAfter, lastIndex)}
+        </span>
       )
     }
     
@@ -283,9 +373,11 @@ export default function ClozePanel({
           overflowY: 'auto',
           background: eyeCareMode 
             ? 'linear-gradient(180deg, #F1F8E9 0%, #FFFDE7 100%)'
-            : '#ffffff'
+            : '#ffffff',
+          cursor: textMark?.isMarkMode ? 'text' : 'default'
         }}
         ref={contentRef}
+        onMouseUp={handleArticleMouseUp}
       >
         <div
           className="prose prose-sm max-w-none select-text"
