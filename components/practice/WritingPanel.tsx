@@ -764,12 +764,12 @@ export default function WritingPanel({
                 {parsedLines.map((line, index) => (
                   <div
                     key={index}
-                    className={`py-0.5 px-1 rounded cursor-pointer transition-colors ${
+                    className={`py-0.5 px-1 rounded cursor-pointer transition-colors w-full ${
                       selectedLineIndex === index ? 'bg-blue-100' : 'hover:bg-gray-100'
                     }`}
                     style={{ 
                       textAlign: line.align,
-                      paddingLeft: line.align === 'left' ? `${line.indent}em` : undefined,
+                      paddingLeft: line.align === 'left' && line.indent ? `${line.indent}em` : undefined,
                     }}
                     onClick={() => setSelectedLineIndex(index)}
                   >
