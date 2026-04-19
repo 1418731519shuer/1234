@@ -185,6 +185,7 @@ async function saveReading(data: any, year: number, textNum: number) {
         content: data.content,
         source: `${year}年考研英语一真题`,
         year,
+        questionType: 'reading',
         category: data.category || '综合',
         difficulty: data.difficulty || 3,
         questions: {
@@ -194,9 +195,9 @@ async function saveReading(data: any, year: number, textNum: number) {
             correctAnswer: q.correctAnswer || 'A',
             analysis: q.analysis || '',
             options: {
-              create: (q.options || []).map((opt: string, j: number) => ({
+              create: (q.options || []).map((opt: any, j: number) => ({
                 optionKey: String.fromCharCode(65 + j),
-                content: typeof opt === 'string' ? opt : opt.content || '',
+                content: typeof opt === 'string' ? opt : (opt?.content || ''),
               })),
             },
           })),
@@ -232,6 +233,7 @@ async function saveCloze(data: any, year: number) {
         content,
         source: `${year}年考研英语一真题`,
         year,
+        questionType: 'cloze',
         category: data.category || '完型填空',
         difficulty: data.difficulty || 3,
         questions: {
@@ -284,6 +286,7 @@ async function saveSevenFive(data: any, year: number) {
         content,
         source: `${year}年考研英语一真题`,
         year,
+        questionType: 'sevenFive',
         category: data.category || '七选五',
         difficulty: data.difficulty || 3,
         questions: {

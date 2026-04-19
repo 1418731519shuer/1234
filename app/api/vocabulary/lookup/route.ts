@@ -155,10 +155,8 @@ export async function GET(request: NextRequest) {
     }
     
     // 提取所有英文单词
-    const words = content
-      .match(/[a-zA-Z]+/g) || []
-      .map(w => w.toLowerCase())
-      .filter(w => w.length >= 3) // 过滤太短的词
+    const wordMatches = content.match(/[a-zA-Z]+/g) || []
+    const words = wordMatches.map(w => w.toLowerCase()).filter(w => w.length >= 3) // 过滤太短的词
     const uniqueWords = [...new Set(words)]
     
     // 查询已缓存的词

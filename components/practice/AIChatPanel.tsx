@@ -14,6 +14,11 @@ import {
   Fish,
   Plus
 } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
+import rehypeKatex from 'rehype-katex'
+import 'katex/dist/katex.min.css'
 
 interface Message {
   id: string
@@ -396,7 +401,33 @@ export default function AIChatPanel({
                     ? 'bg-emerald-500 text-white rounded-br-md' 
                     : 'bg-emerald-50 text-emerald-800 rounded-bl-md'
                 }`}>
-                  {msg.content}
+                  {msg.role === 'user' ? (
+                    msg.content
+                  ) : (
+                    <div className="prose prose-sm prose-emerald max-w-none [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5 [&_pre]:my-1 [&_code]:text-emerald-700 [&_code]:bg-emerald-100/50 [&_code]:px-1 [&_code]:rounded">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm, remarkMath]}
+                        rehypePlugins={[rehypeKatex]}
+                        components={{
+                          p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                          ul: ({ children }) => <ul className="list-disc pl-4 mb-2">{children}</ul>,
+                          ol: ({ children }) => <ol className="list-decimal pl-4 mb-2">{children}</ol>,
+                          li: ({ children }) => <li className="mb-1">{children}</li>,
+                          strong: ({ children }) => <strong className="font-semibold text-emerald-900">{children}</strong>,
+                          code: ({ className, children, ...props }) => {
+                            const isInline = !className
+                            return isInline ? (
+                              <code className="bg-emerald-100/50 px-1 rounded text-emerald-700" {...props}>{children}</code>
+                            ) : (
+                              <code className="block bg-emerald-100/50 p-2 rounded-lg text-emerald-700 overflow-x-auto" {...props}>{children}</code>
+                            )
+                          },
+                        }}
+                      >
+                        {msg.content}
+                      </ReactMarkdown>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}

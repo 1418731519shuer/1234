@@ -109,10 +109,8 @@ export async function GET(request: NextRequest) {
     }
     
     // 提取单词
-    const words = content
-      .match(/[a-zA-Z]+/g) || []
-      .map(w => w.toLowerCase())
-      .filter(w => w.length >= 3)
+    const wordMatches = content.match(/[a-zA-Z]+/g) || []
+    const words = wordMatches.map(w => w.toLowerCase()).filter(w => w.length >= 3)
     const uniqueWords = [...new Set(words)]
     
     console.log('Unique words found:', uniqueWords.length)

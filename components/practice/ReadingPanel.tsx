@@ -381,7 +381,7 @@ export default function ReadingPanel({
               variant={showTranslation ? "default" : "outline"}
               size="sm"
               onClick={() => {
-                if (translation.length === 0 && onTranslate) {
+                if ((translation?.length ?? 0) === 0 && onTranslate) {
                   onTranslate()
                 }
                 setShowTranslation(!showTranslation)
@@ -498,7 +498,7 @@ export default function ReadingPanel({
             }
           }}
         >
-          {showTranslation && translation.length > 0 ? renderTranslation() : renderContent()}
+          {showTranslation && (translation?.length ?? 0) > 0 ? renderTranslation() : renderContent()}
         </div>
         
         {/* 生词弹窗 */}
