@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="wand-body" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#60a5fa"/>
+      <stop offset="100%" style="stop-color:#3b82f6"/>
+    </linearGradient>
+    <linearGradient id="wand-tip" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#fbbf24"/>
+      <stop offset="100%" style="stop-color:#f59e0b"/>
+    </linearGradient>
+    <filter id="glow-yellow">
+      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <!-- 魔法棒主体 - 蓝色 -->
+  <rect x="4" y="12" width="20" height="6" rx="2" fill="url(#wand-body)" transform="rotate(-45 14 15)"/>
+  <!-- 魔法棒头部 - 黄色星星 -->
+  <path d="M6 6 L7 9 L10 10 L7 11 L6 14 L5 11 L2 10 L5 9 Z" fill="url(#wand-tip)" filter="url(#glow-yellow)"/>
+  <!-- 小星星装饰 -->
+  <circle cx="4" cy="4" r="1.5" fill="#fbbf24" opacity="0.8"/>
+  <circle cx="10" cy="3" r="1" fill="#fbbf24" opacity="0.6"/>
+  <circle cx="12" cy="7" r="1.2" fill="#fbbf24" opacity="0.7"/>
+</svg>
