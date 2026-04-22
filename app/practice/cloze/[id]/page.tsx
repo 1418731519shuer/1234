@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Home, Loader2, Highlighter, MousePointer } from 'lucide-react'
 import { useTextMark } from '@/hooks/useTextMark'
 import { usePracticeStorage } from '@/hooks/usePracticeStorage'
+import { WrongQuestionStorage, type LocalWrongQuestion } from '@/lib/localStorage'
 
 interface ClozeBlank {
   blankNum: number
@@ -144,16 +145,38 @@ export default function ClozePracticePage({ params }: { params: Promise<{ id: st
       duration
     )
     
-    // 保存答题记录
+    // 保存答题记录并记录错题
     article.questions.forEach(q => {
+      const isCorrect = answers[q.questionNum] === q.correctAnswer
+      
       practiceStorage.saveAnswer({
         id: `answer_cloze_${q.questionNum}`,
         articleId: article.id,
         blankNum: q.questionNum,
         userAnswer: answers[q.questionNum],
-        isCorrect: answers[q.questionNum] === q.correctAnswer,
+        isCorrect,
         answeredAt: new Date().toISOString(),
       })
+      
+      // 如果答错，添加到错题本
+      if (!isCorrect) {
+        const wrongQuestion: LocalWrongQuestion = {
+          id: `wrong_cloze_${q.id}`,
+          questionId: q.id,
+          articleId: article.id,
+          articleTitle: article.title,
+          year: article.year,
+          questionNum: q.questionNum,
+          stem: `第${q.questionNum}题: ${q.stem}`,
+          userAnswer: answers[q.questionNum] || '',
+          correctAnswer: q.correctAnswer,
+          analysis: q.analysis,
+          wrongCount: 1,
+          lastWrongAt: new Date().toISOString(),
+          isMastered: false,
+        }
+        WrongQuestionStorage.add(wrongQuestion)
+      }
     })
     
     setIsSubmitted(true)

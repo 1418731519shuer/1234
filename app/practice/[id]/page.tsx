@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { useTextMark } from '@/hooks/useTextMark'
 import { usePracticeStorage } from '@/hooks/usePracticeStorage'
+import { WrongQuestionStorage, type LocalWrongQuestion } from '@/lib/localStorage'
 
 interface Article {
   id: string
@@ -171,16 +172,38 @@ export default function PracticePage({ params }: { params: Promise<{ id: string 
       duration
     )
     
-    // 保存答题记录
+    // 保存答题记录并记录错题
     article.questions.forEach(q => {
+      const isCorrect = answers[q.id] === q.correctAnswer
+      
       practiceStorage.saveAnswer({
         id: `answer_${q.id}`,
         articleId: article.id,
         questionId: q.id,
         userAnswer: answers[q.id],
-        isCorrect: answers[q.id] === q.correctAnswer,
+        isCorrect,
         answeredAt: new Date().toISOString(),
       })
+      
+      // 如果答错，添加到错题本
+      if (!isCorrect) {
+        const wrongQuestion: LocalWrongQuestion = {
+          id: `wrong_${q.id}`,
+          questionId: q.id,
+          articleId: article.id,
+          articleTitle: article.title,
+          year: article.year,
+          questionNum: q.questionNum,
+          stem: q.stem,
+          userAnswer: answers[q.id] || '',
+          correctAnswer: q.correctAnswer,
+          analysis: q.analysis,
+          wrongCount: 1,
+          lastWrongAt: new Date().toISOString(),
+          isMastered: false,
+        }
+        WrongQuestionStorage.add(wrongQuestion)
+      }
     })
     
     setIsSubmitted(true)
