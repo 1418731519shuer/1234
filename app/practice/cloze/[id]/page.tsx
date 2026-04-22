@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Home, Loader2, Highlighter, MousePointer } from 'lucide-react'
 import { useTextMark } from '@/hooks/useTextMark'
 import { usePracticeStorage } from '@/hooks/usePracticeStorage'
-import { WrongQuestionStorage, type LocalWrongQuestion } from '@/lib/localStorage'
+import { WrongQuestionStorage, type LocalWrongQuestion, AIChatStorage, type LocalAIChat } from '@/lib/localStorage'
 
 interface ClozeBlank {
   blankNum: number
@@ -186,6 +186,28 @@ export default function ClozePracticePage({ params }: { params: Promise<{ id: st
     setAiQuestion(question)
   }
   
+  const handleSaveChat = (userMessage: string, aiResponse: string, category?: string) => {
+    if (!article) return
+    
+    const chat: LocalAIChat = {
+      id: `chat_${Date.now()}`,
+      articleId: article.id,
+      userMessage,
+      aiResponse,
+      category: category || '完型填空',
+      keywords: extractKeywords(userMessage),
+      createdAt: new Date().toISOString(),
+    }
+    
+    AIChatStorage.add(chat)
+  }
+  
+  const extractKeywords = (text: string): string[] => {
+    const words = text.match(/[\u4e00-\u9fa5]+|[a-zA-Z]+/g) || []
+    const stopWords = ['的', '是', '在', '了', '和', '与', '或', '这', '那', '有', '为', '以', '及', '我', '你', '他', '她', '它']
+    return [...new Set(words.filter(w => w.length > 1 && !stopWords.includes(w)))].slice(0, 5)
+  }
+  
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -333,7 +355,7 @@ export default function ClozePracticePage({ params }: { params: Promise<{ id: st
             currentQuestionIndex={currentBlank ? article.questions.findIndex(q => q.questionNum === currentBlank) : 0}
             answers={answers}
             isSubmitted={isSubmitted}
-            onSaveChat={async () => {}}
+            onSaveChat={handleSaveChat}
             onSaveErrorNote={() => {}}
             errorNotes={{}}
             initialQuestion={aiQuestion}

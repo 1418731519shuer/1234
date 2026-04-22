@@ -48,7 +48,7 @@ interface AIChatPanelProps {
   currentQuestionIndex: number
   answers: Record<string, string>
   isSubmitted: boolean
-  onSaveChat: (messages: Message[]) => void
+  onSaveChat: (userMessage: string, aiResponse: string, category?: string) => void
   onSaveErrorNote?: (questionId: string, note: string) => void
   errorNotes?: Record<string, string>
   initialQuestion?: string
@@ -178,12 +178,17 @@ export default function AIChatPanel({
       
       const data = await response.json()
       
+      const aiResponse = data.response || '抱歉，我暂时无法回答。'
+      
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: data.response || '抱歉，我暂时无法回答。',
+        content: aiResponse,
         timestamp: new Date(),
       }])
+      
+      // 保存对话到知识库
+      onSaveChat(input, aiResponse, selectedQuestion !== null ? `Q${questions[selectedQuestion].questionNum}` : undefined)
     } catch (error) {
       console.error('AI chat error:', error)
     } finally {

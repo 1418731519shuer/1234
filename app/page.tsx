@@ -186,7 +186,7 @@ export default function Home() {
     if (record) {
       return {
         done: true,
-        score: `${record.correctCount} / ${record.totalQuestions}`,
+        score: `${record.totalCorrect} / ${record.totalQuestions}`,
         time: formatTime(record.duration)
       }
     }
@@ -201,7 +201,7 @@ export default function Home() {
     <div className="min-h-screen flex relative" onClick={handleClick} style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif' }}>
       {/* 烟花特效 */}
       {fireworks.map(f => (
-        <Firework key={f.id} x={f.x} y={f.y} id={f.id} />
+        <Firework key={f.id} x={f.x} y={f.y} />
       ))}
       
       {/* 背景图片 - 全屏 */}

@@ -18,7 +18,7 @@ import {
 } from 'lucide-react'
 import { useTextMark } from '@/hooks/useTextMark'
 import { usePracticeStorage } from '@/hooks/usePracticeStorage'
-import { WrongQuestionStorage, type LocalWrongQuestion } from '@/lib/localStorage'
+import { WrongQuestionStorage, type LocalWrongQuestion, AIChatStorage, type LocalAIChat } from '@/lib/localStorage'
 
 interface Article {
   id: string
@@ -210,19 +210,27 @@ export default function PracticePage({ params }: { params: Promise<{ id: string 
     setShowAI(true)
   }
   
-  const handleSaveChat = async (messages: any[]) => {
-    try {
-      await fetch('/api/knowledge', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          articleId: article?.id,
-          messages,
-        }),
-      })
-    } catch (error) {
-      console.error('Save chat error:', error)
+  const handleSaveChat = (userMessage: string, aiResponse: string, category?: string) => {
+    if (!article) return
+    
+    const chat: LocalAIChat = {
+      id: `chat_${Date.now()}`,
+      articleId: article.id,
+      userMessage,
+      aiResponse,
+      category: category || 'AI问答',
+      keywords: extractKeywords(userMessage),
+      createdAt: new Date().toISOString(),
     }
+    
+    AIChatStorage.add(chat)
+  }
+  
+  // 提取关键词
+  const extractKeywords = (text: string): string[] => {
+    const words = text.match(/[\u4e00-\u9fa5]+|[a-zA-Z]+/g) || []
+    const stopWords = ['的', '是', '在', '了', '和', '与', '或', '这', '那', '有', '为', '以', '及', '我', '你', '他', '她', '它']
+    return [...new Set(words.filter(w => w.length > 1 && !stopWords.includes(w)))].slice(0, 5)
   }
   
   const handleSaveErrorNote = (questionId: string, note: string) => {

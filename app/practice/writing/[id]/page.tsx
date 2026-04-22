@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Home, Loader2 } from 'lucide-react'
 import { usePracticeStorage } from '@/hooks/usePracticeStorage'
+import { AIChatStorage, type LocalAIChat } from '@/lib/localStorage'
 
 interface WritingScore {
   content: number
@@ -209,6 +210,28 @@ ${answer}
     setAiQuestion(question)
   }
   
+  const handleSaveChat = (userMessage: string, aiResponse: string, category?: string) => {
+    if (!article) return
+    
+    const chat: LocalAIChat = {
+      id: `chat_${Date.now()}`,
+      articleId: article.id,
+      userMessage,
+      aiResponse,
+      category: category || '写作',
+      keywords: extractKeywords(userMessage),
+      createdAt: new Date().toISOString(),
+    }
+    
+    AIChatStorage.add(chat)
+  }
+  
+  const extractKeywords = (text: string): string[] => {
+    const words = text.match(/[\u4e00-\u9fa5]+|[a-zA-Z]+/g) || []
+    const stopWords = ['的', '是', '在', '了', '和', '与', '或', '这', '那', '有', '为', '以', '及', '我', '你', '他', '她', '它']
+    return [...new Set(words.filter(w => w.length > 1 && !stopWords.includes(w)))].slice(0, 5)
+  }
+  
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -330,7 +353,7 @@ ${answer}
             currentQuestionIndex={currentTaskIndex}
             answers={userAnswers}
             isSubmitted={isSubmitted}
-            onSaveChat={async () => {}}
+            onSaveChat={handleSaveChat}
             onSaveErrorNote={() => {}}
             errorNotes={{}}
             initialQuestion={aiQuestion}
