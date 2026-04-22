@@ -318,6 +318,12 @@ export default function Home() {
               <span>统计分析</span>
             </div>
           </Link>
+          <Link href="/admin/submit">
+            <div className="flex items-center gap-3 px-5 py-2.5 text-sm cursor-pointer transition-all duration-300 hover:bg-white/40 rounded-lg mx-2" style={{ color: 'var(--tx2)' }}>
+              <span>📤</span>
+              <span>文章提交</span>
+            </div>
+          </Link>
         </div>
         
         {/* 底部 - 鼠标样式选择 + 连续学习 */}
