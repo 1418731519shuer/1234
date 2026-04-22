@@ -7,6 +7,7 @@ const STORAGE_KEYS = {
   VOCABULARY: 'kaoyan_vocabulary',
   TODAY_STATS: 'kaoyan_today_stats',
   USER_SETTINGS: 'kaoyan_user_settings',
+  AI_CHATS: 'kaoyan_ai_chats',
 }
 
 // 练习记录
@@ -36,16 +37,34 @@ export interface LocalAnswerRecord {
   answeredAt: string
 }
 
-// 错题
+// 错题 - 扩展字段
 export interface LocalWrongQuestion {
   id: string
   questionId: string
   articleId: string
+  articleTitle?: string
+  year?: number
+  questionNum?: number
+  stem?: string           // 题目内容
+  relatedParagraph?: string // 关联段落
   userAnswer: string
   correctAnswer: string
+  analysis?: string       // 错因分析
   wrongCount: number
   lastWrongAt: string
   isMastered: boolean
+}
+
+// AI对话记录
+export interface LocalAIChat {
+  id: string
+  articleId?: string
+  questionId?: string
+  userMessage: string
+  aiResponse: string
+  category?: string       // 分类标签
+  keywords?: string[]     // 关键词
+  createdAt: string
 }
 
 // 生词
@@ -245,5 +264,45 @@ export const VocabularyStorage = {
   remove: (word: string): void => {
     const vocabs = VocabularyStorage.getAll().filter(v => v.word !== word)
     setItem(STORAGE_KEYS.VOCABULARY, vocabs)
+  },
+}
+
+// AI对话管理
+export const AIChatStorage = {
+  getAll: (): LocalAIChat[] => {
+    return getItem<LocalAIChat[]>(STORAGE_KEYS.AI_CHATS, [])
+  },
+
+  getByArticle: (articleId: string): LocalAIChat[] => {
+    return AIChatStorage.getAll().filter(c => c.articleId === articleId)
+  },
+
+  add: (chat: LocalAIChat): void => {
+    const chats = AIChatStorage.getAll()
+    chats.unshift(chat) // 新的放前面
+    setItem(STORAGE_KEYS.AI_CHATS, chats)
+  },
+
+  remove: (id: string): void => {
+    const chats = AIChatStorage.getAll().filter(c => c.id !== id)
+    setItem(STORAGE_KEYS.AI_CHATS, chats)
+  },
+
+  search: (keyword: string): LocalAIChat[] => {
+    const lowerKeyword = keyword.toLowerCase()
+    return AIChatStorage.getAll().filter(c => 
+      c.userMessage.toLowerCase().includes(lowerKeyword) ||
+      c.aiResponse.toLowerCase().includes(lowerKeyword) ||
+      c.keywords?.some(k => k.toLowerCase().includes(lowerKeyword))
+    )
+  },
+
+  getCategories: (): string[] => {
+    const chats = AIChatStorage.getAll()
+    const categories = new Set<string>()
+    chats.forEach(c => {
+      if (c.category) categories.add(c.category)
+    })
+    return Array.from(categories)
   },
 }
