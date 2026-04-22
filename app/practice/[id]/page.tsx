@@ -17,6 +17,7 @@ import {
   MousePointer
 } from 'lucide-react'
 import { useTextMark } from '@/hooks/useTextMark'
+import { usePracticeStorage } from '@/hooks/usePracticeStorage'
 
 interface Article {
   id: string
@@ -58,7 +59,6 @@ export default function PracticePage({ params }: { params: Promise<{ id: string 
   const [highlights, setHighlights] = useState<Highlight[]>([])
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [startTime] = useState(new Date())
-  const [practiceId, setPracticeId] = useState<string>('')
   const [showAI, setShowAI] = useState(false)
   const [errorNotes, setErrorNotes] = useState<Record<string, string>>({})
   const [translation, setTranslation] = useState<Array<{english: string, chinese: string}>>([])
@@ -67,6 +67,9 @@ export default function PracticePage({ params }: { params: Promise<{ id: string 
   
   // 标记功能
   const textMark = useTextMark(isSubmitted)
+  
+  // 本地存储
+  const practiceStorage = usePracticeStorage()
   
   useEffect(() => {
     const fetchArticle = async () => {
@@ -87,13 +90,17 @@ export default function PracticePage({ params }: { params: Promise<{ id: string 
           }
         }
         
-        const practiceRes = await fetch('/api/practice', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ articleId: resolvedParams.id }),
-        })
-        const practice = await practiceRes.json()
-        setPracticeId(practice.id)
+        // 从 localStorage 读取已有的答题记录
+        const existingAnswers = practiceStorage.getAnswers(resolvedParams.id)
+        if (existingAnswers.length > 0) {
+          const answerMap: Record<string, string> = {}
+          existingAnswers.forEach(a => {
+            if (a.questionId && a.userAnswer) {
+              answerMap[a.questionId] = a.userAnswer
+            }
+          })
+          setAnswers(answerMap)
+        }
       } catch (error) {
         console.error('Load article error:', error)
       } finally {
@@ -144,24 +151,40 @@ export default function PracticePage({ params }: { params: Promise<{ id: string 
   }
   
   const handleSubmit = async () => {
-    if (!article || !practiceId) return
+    if (!article) return
     
-    try {
-      await fetch('/api/practice', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          practiceId,
-          answers,
-          duration: Math.floor((Date.now() - startTime.getTime()) / 1000),
-        }),
+    // 计算正确数量
+    let correctCount = 0
+    article.questions.forEach(q => {
+      if (answers[q.id] === q.correctAnswer) {
+        correctCount++
+      }
+    })
+    
+    const duration = Math.floor((Date.now() - startTime.getTime()) / 1000)
+    
+    // 保存到 localStorage
+    practiceStorage.completePractice(
+      article.id,
+      correctCount,
+      article.questions.length,
+      duration
+    )
+    
+    // 保存答题记录
+    article.questions.forEach(q => {
+      practiceStorage.saveAnswer({
+        id: `answer_${q.id}`,
+        articleId: article.id,
+        questionId: q.id,
+        userAnswer: answers[q.id],
+        isCorrect: answers[q.id] === q.correctAnswer,
+        answeredAt: new Date().toISOString(),
       })
-      
-      setIsSubmitted(true)
-      setShowAI(true)
-    } catch (error) {
-      console.error('Submit error:', error)
-    }
+    })
+    
+    setIsSubmitted(true)
+    setShowAI(true)
   }
   
   const handleSaveChat = async (messages: any[]) => {
@@ -181,16 +204,8 @@ export default function PracticePage({ params }: { params: Promise<{ id: string 
   
   const handleSaveErrorNote = (questionId: string, note: string) => {
     setErrorNotes(prev => ({ ...prev, [questionId]: note }))
-    
-    fetch('/api/practice/note', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        practiceId,
-        questionId,
-        note,
-      }),
-    }).catch(console.error)
+    // 笔记暂时只保存在组件状态中，刷新后丢失
+    // 如果需要持久化，可以扩展 localStorage
   }
   
   const handleTranslate = async () => {

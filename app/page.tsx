@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { PracticeStorage, type LocalPracticeRecord } from '@/lib/localStorage'
 
 interface Article {
   id: string
@@ -21,13 +22,6 @@ interface TodayStats {
   totalQuestions: number
   totalCorrect: number
   totalTime: number
-}
-
-interface PracticeRecord {
-  articleId: string
-  correctCount: number
-  totalQuestions: number
-  duration: number
 }
 
 const QUESTION_TYPES = [
@@ -88,7 +82,7 @@ export default function Home() {
   const router = useRouter()
   const [articles, setArticles] = useState<Article[]>([])
   const [todayStats, setTodayStats] = useState<TodayStats | null>(null)
-  const [practiceRecords, setPracticeRecords] = useState<Record<string, PracticeRecord>>({})
+  const [practiceRecords, setPracticeRecords] = useState<Record<string, LocalPracticeRecord>>({})
   const [loading, setLoading] = useState(true)
   const [examType, setExamType] = useState<'english1' | 'english2'>('english1')
   const [activeType, setActiveType] = useState<string>('reading')
@@ -147,25 +141,26 @@ export default function Home() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [articlesRes, statsRes, recordsRes] = await Promise.all([
-          fetch(`/api/articles?questionType=${activeType}&examType=${examType}`),
-          fetch('/api/practice?type=today'),
-          fetch('/api/practice'),
-        ])
-        
+        // 只获取文章列表（题目数据存在数据库中）
+        const articlesRes = await fetch(`/api/articles?questionType=${activeType}&examType=${examType}`)
         const articlesData = await articlesRes.json()
-        const statsData = await statsRes.json()
-        const recordsData = await recordsRes.json()
-        
         setArticles(articlesData.articles || [])
-        setTodayStats(statsData)
         
-        const recordMap: Record<string, PracticeRecord> = {}
-        if (recordsData.records) {
-          recordsData.records.forEach((r: PracticeRecord & { article: { id: string } }) => {
-            recordMap[r.articleId || r.article?.id] = r
-          })
-        }
+        // 从 localStorage 读取今日统计
+        const stats = PracticeStorage.getTodayStats()
+        setTodayStats({
+          articlesRead: stats.articlesRead,
+          totalQuestions: stats.questionsAnswered,
+          totalCorrect: stats.correctCount,
+          totalTime: stats.totalTime,
+        })
+        
+        // 从 localStorage 读取练习记录
+        const records = PracticeStorage.getAll()
+        const recordMap: Record<string, LocalPracticeRecord> = {}
+        records.forEach(r => {
+          recordMap[r.articleId] = r
+        })
         setPracticeRecords(recordMap)
       } catch (error) {
         console.error('Fetch error:', error)

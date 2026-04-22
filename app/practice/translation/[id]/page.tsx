@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Home, Loader2, Highlighter, MousePointer } from 'lucide-react'
 import { useTextMark } from '@/hooks/useTextMark'
+import { usePracticeStorage } from '@/hooks/usePracticeStorage'
 
 interface TranslationSentence {
   id: string
@@ -56,12 +57,14 @@ export default function TranslationPracticePage({ params }: { params: Promise<{ 
   const [currentIndex, setCurrentIndex] = useState(0)
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [startTime] = useState(new Date())
-  const [practiceId, setPracticeId] = useState<string>('')
   const [aiQuestion, setAiQuestion] = useState<string>('')
   const [isBatchScoring, setIsBatchScoring] = useState(false)
   
   // 标记功能
   const textMark = useTextMark(isSubmitted)
+  
+  // 本地存储
+  const practiceStorage = usePracticeStorage()
   
   useEffect(() => {
     const fetchArticle = async () => {
@@ -84,14 +87,6 @@ export default function TranslationPracticePage({ params }: { params: Promise<{ 
           }))
           setSentences(translationSentences)
         }
-        
-        const practiceRes = await fetch('/api/practice', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ articleId: resolvedParams.id }),
-        })
-        const practice = await practiceRes.json()
-        setPracticeId(practice.id)
       } catch (error) {
         console.error('Load article error:', error)
       } finally {
@@ -190,34 +185,23 @@ ${sentence.userAnswer}
   }
   
   const handleSubmit = async (withAIScore: boolean) => {
-    if (!article || !practiceId) return
+    if (!article) return
     
-    const answers: Record<string, string> = {}
-    sentences.forEach(s => {
-      if (s.userAnswer) {
-        answers[s.id] = s.userAnswer
-      }
-    })
+    const duration = Math.floor((Date.now() - startTime.getTime()) / 1000)
     
-    try {
-      await fetch('/api/practice', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          practiceId,
-          answers,
-          duration: Math.floor((Date.now() - startTime.getTime()) / 1000),
-        }),
-      })
-      
-      setIsSubmitted(true)
-      
-      // 如果选择AI评分，则批量评分
-      if (withAIScore) {
-        batchAIScore()
-      }
-    } catch (error) {
-      console.error('Submit error:', error)
+    // 保存到 localStorage（翻译题没有标准答案，只记录完成状态）
+    practiceStorage.completePractice(
+      article.id,
+      sentences.filter(s => s.userAnswer).length, // 已翻译的句子数
+      sentences.length,
+      duration
+    )
+    
+    setIsSubmitted(true)
+    
+    // 如果选择AI评分，则批量评分
+    if (withAIScore) {
+      batchAIScore()
     }
   }
   

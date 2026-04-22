@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Home, Loader2, Highlighter, MousePointer } from 'lucide-react'
 import { useTextMark } from '@/hooks/useTextMark'
+import { usePracticeStorage } from '@/hooks/usePracticeStorage'
 
 interface ClozeBlank {
   blankNum: number
@@ -53,11 +54,13 @@ export default function ClozePracticePage({ params }: { params: Promise<{ id: st
   const [answers, setAnswers] = useState<Record<number, string>>({})
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [startTime] = useState(new Date())
-  const [practiceId, setPracticeId] = useState<string>('')
   const [aiQuestion, setAiQuestion] = useState<string>('')
   
   // 标记功能
   const textMark = useTextMark(isSubmitted)
+  
+  // 本地存储
+  const practiceStorage = usePracticeStorage()
   
   useEffect(() => {
     const fetchArticle = async () => {
@@ -66,13 +69,17 @@ export default function ClozePracticePage({ params }: { params: Promise<{ id: st
         const data = await response.json()
         setArticle(data)
         
-        const practiceRes = await fetch('/api/practice', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ articleId: resolvedParams.id }),
-        })
-        const practice = await practiceRes.json()
-        setPracticeId(practice.id)
+        // 从 localStorage 读取已有的答题记录
+        const existingAnswers = practiceStorage.getAnswers(resolvedParams.id)
+        if (existingAnswers.length > 0) {
+          const answerMap: Record<number, string> = {}
+          existingAnswers.forEach(a => {
+            if (a.blankNum !== undefined && a.userAnswer) {
+              answerMap[a.blankNum] = a.userAnswer
+            }
+          })
+          setAnswers(answerMap)
+        }
         
         // 默认选中第一个空位
         if (data.questions && data.questions.length > 0) {
@@ -117,23 +124,39 @@ export default function ClozePracticePage({ params }: { params: Promise<{ id: st
   }
   
   const handleSubmit = async () => {
-    if (!article || !practiceId) return
+    if (!article) return
     
-    try {
-      await fetch('/api/practice', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          practiceId,
-          answers,
-          duration: Math.floor((Date.now() - startTime.getTime()) / 1000),
-        }),
+    // 计算正确数量
+    let correctCount = 0
+    article.questions.forEach(q => {
+      if (answers[q.questionNum] === q.correctAnswer) {
+        correctCount++
+      }
+    })
+    
+    const duration = Math.floor((Date.now() - startTime.getTime()) / 1000)
+    
+    // 保存到 localStorage
+    practiceStorage.completePractice(
+      article.id,
+      correctCount,
+      article.questions.length,
+      duration
+    )
+    
+    // 保存答题记录
+    article.questions.forEach(q => {
+      practiceStorage.saveAnswer({
+        id: `answer_cloze_${q.questionNum}`,
+        articleId: article.id,
+        blankNum: q.questionNum,
+        userAnswer: answers[q.questionNum],
+        isCorrect: answers[q.questionNum] === q.correctAnswer,
+        answeredAt: new Date().toISOString(),
       })
-      
-      setIsSubmitted(true)
-    } catch (error) {
-      console.error('Submit error:', error)
-    }
+    })
+    
+    setIsSubmitted(true)
   }
   
   const handleAskAI = (question: string) => {

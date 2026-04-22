@@ -8,6 +8,7 @@ import AIChatPanel from '@/components/practice/AIChatPanel'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Home, Loader2 } from 'lucide-react'
+import { usePracticeStorage } from '@/hooks/usePracticeStorage'
 
 interface WritingScore {
   content: number
@@ -60,10 +61,12 @@ export default function WritingPracticePage({ params }: { params: Promise<{ id: 
   const [userAnswers, setUserAnswers] = useState<Record<string, string>>({})
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [startTime] = useState(new Date())
-  const [practiceId, setPracticeId] = useState<string>('')
   const [aiQuestion, setAiQuestion] = useState<string>('')
   const [aiScores, setAiScores] = useState<Record<string, WritingScore>>({})
   const [isScoring, setIsScoring] = useState(false)
+  
+  // 本地存储
+  const practiceStorage = usePracticeStorage()
   
   useEffect(() => {
     const fetchArticle = async () => {
@@ -71,14 +74,6 @@ export default function WritingPracticePage({ params }: { params: Promise<{ id: 
         const response = await fetch(`/api/articles/${resolvedParams.id}`)
         const data = await response.json()
         setArticle(data)
-        
-        const practiceRes = await fetch('/api/practice', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ articleId: resolvedParams.id }),
-        })
-        const practice = await practiceRes.json()
-        setPracticeId(practice.id)
       } catch (error) {
         console.error('Load article error:', error)
       } finally {
@@ -182,35 +177,31 @@ ${answer}
   }
   
   const handleSubmit = async (withAIScore: boolean) => {
-    if (!article || !practiceId) return
+    if (!article) return
     
-    try {
-      await fetch('/api/practice', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          practiceId,
-          answers: userAnswers,
-          duration: Math.floor((Date.now() - startTime.getTime()) / 1000),
-        }),
-      })
-      
-      setIsSubmitted(true)
-      
-      // 如果选择AI评分，则批量评分
-      if (withAIScore) {
-        setIsScoring(true)
-        for (const task of tasks) {
-          if (userAnswers[task.id]?.trim()) {
-            await handleAIScore(task.id)
-            // 延迟避免API限流
-            await new Promise(resolve => setTimeout(resolve, 500))
-          }
+    const duration = Math.floor((Date.now() - startTime.getTime()) / 1000)
+    
+    // 保存到 localStorage（写作题记录完成状态）
+    practiceStorage.completePractice(
+      article.id,
+      Object.keys(userAnswers).filter(k => userAnswers[k]?.trim()).length,
+      tasks.length,
+      duration
+    )
+    
+    setIsSubmitted(true)
+    
+    // 如果选择AI评分，则批量评分
+    if (withAIScore) {
+      setIsScoring(true)
+      for (const task of tasks) {
+        if (userAnswers[task.id]?.trim()) {
+          await handleAIScore(task.id)
+          // 延迟避免API限流
+          await new Promise(resolve => setTimeout(resolve, 500))
         }
-        setIsScoring(false)
       }
-    } catch (error) {
-      console.error('Submit error:', error)
+      setIsScoring(false)
     }
   }
   
