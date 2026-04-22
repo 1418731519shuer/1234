@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Checkbox } from '@/components/ui/checkbox'
 import { 
   ArrowLeft, 
   Upload, 
@@ -19,7 +20,9 @@ import {
   BookOpen,
   FileQuestion,
   Save,
-  Send
+  Send,
+  File,
+  X
 } from 'lucide-react'
 import type { QuestionType, ParsedResult, ReadingSubmit, ClozeSubmit, SevenFiveSubmit, TranslationSubmit, WritingTaskSubmit } from '@/types/submit'
 
@@ -118,6 +121,13 @@ export default function SubmitPage() {
   const [parseResult, setParseResult] = useState<ParsedResult | null>(null)
   const [editedData, setEditedData] = useState<any>(null)
   const [isSaving, setIsSaving] = useState(false)
+  
+  // 文件上传相关
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null)
+  const [isUploading, setIsUploading] = useState(false)
+  const [autoParse, setAutoParse] = useState(true)
+  const [uploadError, setUploadError] = useState<string | null>(null)
 
   // AI智能解析
   const handleParse = useCallback(async () => {
@@ -151,6 +161,59 @@ export default function SubmitPage() {
     setRawContent(TEMPLATES[type])
     setActiveTab('paste')
   }
+
+  // 文件上传处理
+  const handleFileUpload = useCallback(async (file: File) => {
+    setUploadedFile(file)
+    setUploadError(null)
+    setIsUploading(true)
+    
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('autoParse', autoParse.toString())
+      
+      const response = await fetch('/api/submit/upload', {
+        method: 'POST',
+        body: formData,
+      })
+      
+      const result = await response.json()
+      
+      if (!result.success) {
+        setUploadError(result.error || '文件解析失败')
+        return
+      }
+      
+      // 设置解析后的内容
+      setRawContent(result.content)
+      
+      // 如果有AI解析结果
+      if (result.aiParsed) {
+        setParseResult(result.aiParsed)
+        setEditedData(result.aiParsed.data)
+      }
+      
+    } catch (error) {
+      console.error('Upload error:', error)
+      setUploadError('文件上传失败，请重试')
+    } finally {
+      setIsUploading(false)
+    }
+  }, [autoParse])
+
+  // 拖拽上传
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    const file = e.dataTransfer.files[0]
+    if (file) {
+      handleFileUpload(file)
+    }
+  }, [handleFileUpload])
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+  }, [])
 
   // 保存草稿
   const handleSaveDraft = async () => {
@@ -322,14 +385,106 @@ export default function SubmitPage() {
               )}
 
               {activeTab === 'upload' && (
-                <div className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-lg p-8">
-                  <Upload className="w-12 h-12 text-gray-400 mb-4" />
-                  <p className="text-gray-600 mb-2">拖拽文件到此处，或点击上传</p>
-                  <p className="text-sm text-gray-400 mb-4">支持 .txt, .docx 格式</p>
-                  <Input type="file" accept=".txt,.docx" className="max-w-xs" />
-                  <div className="mt-4 text-xs text-gray-400">
-                    <p>提示：PDF解析功能开发中</p>
+                <div className="flex-1 flex flex-col">
+                  {/* 拖拽上传区域 */}
+                  <div 
+                    className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-lg p-8 transition-colors hover:border-emerald-400 hover:bg-emerald-50/50 cursor-pointer"
+                    onDrop={handleDrop}
+                    onDragOver={handleDragOver}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    {isUploading ? (
+                      <>
+                        <Loader2 className="w-12 h-12 text-emerald-500 mb-4 animate-spin" />
+                        <p className="text-gray-600">正在解析文件...</p>
+                      </>
+                    ) : uploadedFile ? (
+                      <>
+                        <File className="w-12 h-12 text-emerald-500 mb-4" />
+                        <p className="text-gray-600 font-medium">{uploadedFile.name}</p>
+                        <p className="text-sm text-gray-400 mt-1">点击更换文件</p>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-12 h-12 text-gray-400 mb-4" />
+                        <p className="text-gray-600 mb-2">拖拽文件到此处，或点击上传</p>
+                        <p className="text-sm text-gray-400 mb-4">支持 .txt, .doc, .docx, .pdf 格式</p>
+                      </>
+                    )}
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".txt,.doc,.docx,.pdf"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) handleFileUpload(file)
+                      }}
+                    />
                   </div>
+                  
+                  {/* 上传选项 */}
+                  <div className="mt-3 flex items-center justify-between">
+                    <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                      <Checkbox
+                        checked={autoParse}
+                        onCheckedChange={(checked) => setAutoParse(checked as boolean)}
+                      />
+                      上传后自动AI解析
+                    </label>
+                    {rawContent && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setUploadedFile(null)
+                          setRawContent('')
+                          setParseResult(null)
+                          setEditedData(null)
+                        }}
+                      >
+                        <X className="w-4 h-4 mr-1" />
+                        清除
+                      </Button>
+                    )}
+                  </div>
+                  
+                  {/* 错误提示 */}
+                  {uploadError && (
+                    <div className="mt-3 p-3 bg-red-50 rounded-lg text-sm text-red-600 flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4" />
+                      {uploadError}
+                    </div>
+                  )}
+                  
+                  {/* 解析成功提示 */}
+                  {rawContent && !isUploading && !uploadError && (
+                    <div className="mt-3 p-3 bg-green-50 rounded-lg text-sm text-green-600 flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4" />
+                      文件解析成功，共 {rawContent.split(/\s+/).filter(Boolean).length} 词
+                    </div>
+                  )}
+                  
+                  {/* 手动解析按钮 */}
+                  {rawContent && !parseResult && (
+                    <Button 
+                      onClick={handleParse} 
+                      disabled={isParsing}
+                      className="mt-3"
+                    >
+                      {isParsing ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                          AI解析中...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-4 h-4 mr-1" />
+                          AI智能解析
+                        </>
+                      )}
+                    </Button>
+                  )}
                 </div>
               )}
             </CardContent>
