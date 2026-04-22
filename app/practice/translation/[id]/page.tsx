@@ -195,7 +195,8 @@ ${sentence.userAnswer}
       article.id,
       sentences.filter(s => s.userAnswer).length, // 已翻译的句子数
       sentences.length,
-      duration
+      duration,
+      'translation'
     )
     
     setIsSubmitted(true)

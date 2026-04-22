@@ -142,7 +142,8 @@ export default function ClozePracticePage({ params }: { params: Promise<{ id: st
       article.id,
       correctCount,
       article.questions.length,
-      duration
+      duration,
+      'cloze'
     )
     
     // 保存答题记录并记录错题

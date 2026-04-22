@@ -187,7 +187,8 @@ ${answer}
       article.id,
       Object.keys(userAnswers).filter(k => userAnswers[k]?.trim()).length,
       tasks.length,
-      duration
+      duration,
+      'writing'
     )
     
     setIsSubmitted(true)

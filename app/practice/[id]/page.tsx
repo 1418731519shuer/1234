@@ -169,7 +169,8 @@ export default function PracticePage({ params }: { params: Promise<{ id: string 
       article.id,
       correctCount,
       article.questions.length,
-      duration
+      duration,
+      'reading'
     )
     
     // 保存答题记录并记录错题

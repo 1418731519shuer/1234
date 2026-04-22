@@ -115,7 +115,8 @@ export default function SevenFivePracticePage({ params }: { params: Promise<{ id
       article.id,
       correctCount,
       article.questions.length,
-      duration
+      duration,
+      'sevenFive'
     )
     
     // 保存答题记录并记录错题

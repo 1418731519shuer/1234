@@ -8,6 +8,9 @@ const STORAGE_KEYS = {
   TODAY_STATS: 'kaoyan_today_stats',
   USER_SETTINGS: 'kaoyan_user_settings',
   AI_CHATS: 'kaoyan_ai_chats',
+  CHECKIN_RECORDS: 'kaoyan_checkin_records',
+  STUDY_STATS: 'kaoyan_study_stats',
+  ACHIEVEMENTS: 'kaoyan_achievements',
 }
 
 // 练习记录
@@ -304,5 +307,224 @@ export const AIChatStorage = {
       if (c.category) categories.add(c.category)
     })
     return Array.from(categories)
+  },
+}
+
+// 打卡记录
+export interface LocalCheckinRecord {
+  date: string // YYYY-MM-DD
+  checkedAt: string // ISO时间戳
+  articlesRead: number
+  questionsAnswered: number
+  correctCount: number
+  studyTime: number // 分钟
+}
+
+// 学习统计（按日期）
+export interface LocalStudyStats {
+  date: string // YYYY-MM-DD
+  articlesRead: number
+  questionsAnswered: number
+  correctCount: number
+  studyTime: number // 分钟
+  questionTypes: {
+    reading: number
+    cloze: number
+    sevenFive: number
+    translation: number
+    writing: number
+  }
+}
+
+// 成就
+export interface LocalAchievement {
+  id: string
+  type: 'streak' | 'questions' | 'accuracy' | 'time' | 'vocabulary'
+  name: string
+  description: string
+  icon: string
+  unlockedAt?: string
+  progress: number
+  target: number
+}
+
+// 打卡管理
+export const CheckinStorage = {
+  getAll: (): LocalCheckinRecord[] => {
+    return getItem<LocalCheckinRecord[]>(STORAGE_KEYS.CHECKIN_RECORDS, [])
+  },
+
+  getToday: (): LocalCheckinRecord | null => {
+    const today = new Date().toISOString().split('T')[0]
+    return CheckinStorage.getAll().find(c => c.date === today) || null
+  },
+
+  checkin: (data: Partial<LocalCheckinRecord>): void => {
+    const today = new Date().toISOString().split('T')[0]
+    const records = CheckinStorage.getAll()
+    const existingIndex = records.findIndex(c => c.date === today)
+
+    const record: LocalCheckinRecord = {
+      date: today,
+      checkedAt: new Date().toISOString(),
+      articlesRead: data.articlesRead || 0,
+      questionsAnswered: data.questionsAnswered || 0,
+      correctCount: data.correctCount || 0,
+      studyTime: data.studyTime || 0,
+    }
+
+    if (existingIndex >= 0) {
+      records[existingIndex] = record
+    } else {
+      records.push(record)
+    }
+
+    setItem(STORAGE_KEYS.CHECKIN_RECORDS, records)
+  },
+
+  getStreak: (): number => {
+    const records = CheckinStorage.getAll().sort((a, b) => 
+      new Date(b.date).getTime() - new Date(a.date).getTime()
+    )
+
+    if (records.length === 0) return 0
+
+    let streak = 0
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    for (let i = 0; i < records.length; i++) {
+      const checkDate = new Date(records[i].date)
+      checkDate.setHours(0, 0, 0, 0)
+
+      const expectedDate = new Date(today)
+      expectedDate.setDate(expectedDate.getDate() - i)
+
+      if (checkDate.getTime() === expectedDate.getTime()) {
+        streak++
+      } else {
+        break
+      }
+    }
+
+    return streak
+  },
+
+  getWeeklyRecords: (): LocalCheckinRecord[] => {
+    const records = CheckinStorage.getAll()
+    const weekAgo = new Date()
+    weekAgo.setDate(weekAgo.getDate() - 7)
+
+    return records.filter(r => new Date(r.date) >= weekAgo)
+  },
+}
+
+// 学习统计管理
+export const StudyStatsStorage = {
+  getAll: (): LocalStudyStats[] => {
+    return getItem<LocalStudyStats[]>(STORAGE_KEYS.STUDY_STATS, [])
+  },
+
+  getByDate: (date: string): LocalStudyStats | null => {
+    return StudyStatsStorage.getAll().find(s => s.date === date) || null
+  },
+
+  update: (date: string, updates: Partial<LocalStudyStats>): void => {
+    const stats = StudyStatsStorage.getAll()
+    const existingIndex = stats.findIndex(s => s.date === date)
+
+    const defaultStats: LocalStudyStats = {
+      date,
+      articlesRead: 0,
+      questionsAnswered: 0,
+      correctCount: 0,
+      studyTime: 0,
+      questionTypes: {
+        reading: 0,
+        cloze: 0,
+        sevenFive: 0,
+        translation: 0,
+        writing: 0,
+      },
+    }
+
+    if (existingIndex >= 0) {
+      stats[existingIndex] = { ...stats[existingIndex], ...updates }
+    } else {
+      stats.push({ ...defaultStats, ...updates })
+    }
+
+    setItem(STORAGE_KEYS.STUDY_STATS, stats)
+  },
+
+  getWeeklyStats: (): LocalStudyStats[] => {
+    const stats = StudyStatsStorage.getAll()
+    const weekAgo = new Date()
+    weekAgo.setDate(weekAgo.getDate() - 7)
+
+    return stats.filter(s => new Date(s.date) >= weekAgo)
+  },
+
+  getMonthlyStats: (): LocalStudyStats[] => {
+    const stats = StudyStatsStorage.getAll()
+    const monthAgo = new Date()
+    monthAgo.setDate(monthAgo.getDate() - 30)
+
+    return stats.filter(s => new Date(s.date) >= monthAgo)
+  },
+
+  getTotalStats: (): { totalQuestions: number; totalCorrect: number; totalTime: number } => {
+    const stats = StudyStatsStorage.getAll()
+    return stats.reduce((acc, s) => ({
+      totalQuestions: acc.totalQuestions + s.questionsAnswered,
+      totalCorrect: acc.totalCorrect + s.correctCount,
+      totalTime: acc.totalTime + s.studyTime,
+    }), { totalQuestions: 0, totalCorrect: 0, totalTime: 0 })
+  },
+}
+
+// 成就管理
+export const AchievementStorage = {
+  getAll: (): LocalAchievement[] => {
+    const defaults: LocalAchievement[] = [
+      { id: 'streak_7', type: 'streak', name: '初露锋芒', description: '连续学习7天', icon: '🌱', progress: 0, target: 7 },
+      { id: 'streak_30', type: 'streak', name: '持之以恒', description: '连续学习30天', icon: '🔥', progress: 0, target: 30 },
+      { id: 'streak_100', type: 'streak', name: '学霸养成', description: '连续学习100天', icon: '👑', progress: 0, target: 100 },
+      { id: 'questions_100', type: 'questions', name: '小试牛刀', description: '完成100道题目', icon: '✏️', progress: 0, target: 100 },
+      { id: 'questions_500', type: 'questions', name: '勤学苦练', description: '完成500道题目', icon: '📚', progress: 0, target: 500 },
+      { id: 'questions_1000', type: 'questions', name: '题海战术', description: '完成1000道题目', icon: '🏆', progress: 0, target: 1000 },
+      { id: 'accuracy_80', type: 'accuracy', name: '精准打击', description: '正确率达到80%', icon: '🎯', progress: 0, target: 80 },
+      { id: 'accuracy_90', type: 'accuracy', name: '满分达人', description: '正确率达到90%', icon: '⭐', progress: 0, target: 90 },
+      { id: 'time_10h', type: 'time', name: '时间管理', description: '累计学习10小时', icon: '⏰', progress: 0, target: 600 },
+      { id: 'time_50h', type: 'time', name: '专注学习', description: '累计学习50小时', icon: '📖', progress: 0, target: 3000 },
+      { id: 'vocabulary_100', type: 'vocabulary', name: '词汇积累', description: '收藏100个生词', icon: '📝', progress: 0, target: 100 },
+      { id: 'vocabulary_500', type: 'vocabulary', name: '词汇大师', description: '收藏500个生词', icon: '🎓', progress: 0, target: 500 },
+    ]
+    return getItem<LocalAchievement[]>(STORAGE_KEYS.ACHIEVEMENTS, defaults)
+  },
+
+  updateProgress: (type: string, progress: number): LocalAchievement[] => {
+    const achievements = AchievementStorage.getAll()
+    const today = new Date().toISOString()
+
+    achievements.forEach(a => {
+      if (a.type === type) {
+        a.progress = progress
+        if (progress >= a.target && !a.unlockedAt) {
+          a.unlockedAt = today
+        }
+      }
+    })
+
+    setItem(STORAGE_KEYS.ACHIEVEMENTS, achievements)
+    return achievements
+  },
+
+  getUnlocked: (): LocalAchievement[] => {
+    return AchievementStorage.getAll().filter(a => a.unlockedAt)
+  },
+
+  getLocked: (): LocalAchievement[] => {
+    return AchievementStorage.getAll().filter(a => !a.unlockedAt)
   },
 }

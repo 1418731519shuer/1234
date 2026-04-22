@@ -1,6 +1,6 @@
 // 练习记录管理 Hook
 import { useCallback } from 'react'
-import { PracticeStorage, AnswerStorage, type LocalPracticeRecord, type LocalAnswerRecord } from '@/lib/localStorage'
+import { PracticeStorage, AnswerStorage, StudyStatsStorage, AchievementStorage, type LocalPracticeRecord, type LocalAnswerRecord } from '@/lib/localStorage'
 
 export function usePracticeStorage() {
   // 创建新的练习记录
@@ -28,7 +28,8 @@ export function usePracticeStorage() {
     articleId: string,
     correctCount: number,
     totalQuestions: number,
-    duration: number
+    duration: number,
+    questionType: 'reading' | 'cloze' | 'sevenFive' | 'translation' | 'writing' = 'reading'
   ) => {
     const existing = PracticeStorage.getByArticle(articleId)
     
@@ -53,6 +54,31 @@ export function usePracticeStorage() {
       correctCount: stats.correctCount + correctCount,
       totalTime: stats.totalTime + duration,
     })
+
+    // 更新学习统计（按日期）
+    const today = new Date().toISOString().split('T')[0]
+    const existingStats = StudyStatsStorage.getByDate(today)
+    StudyStatsStorage.update(today, {
+      articlesRead: (existingStats?.articlesRead || 0) + (existing?.isCompleted ? 0 : 1),
+      questionsAnswered: (existingStats?.questionsAnswered || 0) + totalQuestions,
+      correctCount: (existingStats?.correctCount || 0) + correctCount,
+      studyTime: (existingStats?.studyTime || 0) + Math.round(duration / 60), // 转换为分钟
+      questionTypes: {
+        reading: (existingStats?.questionTypes.reading || 0) + (questionType === 'reading' ? totalQuestions : 0),
+        cloze: (existingStats?.questionTypes.cloze || 0) + (questionType === 'cloze' ? totalQuestions : 0),
+        sevenFive: (existingStats?.questionTypes.sevenFive || 0) + (questionType === 'sevenFive' ? totalQuestions : 0),
+        translation: (existingStats?.questionTypes.translation || 0) + (questionType === 'translation' ? totalQuestions : 0),
+        writing: (existingStats?.questionTypes.writing || 0) + (questionType === 'writing' ? totalQuestions : 0),
+      },
+    })
+
+    // 更新成就进度
+    const totalStats = StudyStatsStorage.getTotalStats()
+    AchievementStorage.updateProgress('questions', totalStats.totalQuestions)
+    AchievementStorage.updateProgress('time', totalStats.totalTime)
+    if (totalStats.totalQuestions > 0) {
+      AchievementStorage.updateProgress('accuracy', Math.round((totalStats.totalCorrect / totalStats.totalQuestions) * 100))
+    }
   }, [])
 
   // 保存答题记录
